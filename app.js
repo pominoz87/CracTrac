@@ -1,4 +1,18 @@
 // app.js
+// Test Firestore connection by adding a test document
+
+firebase.firestore().collection("test").add({
+  test: "Connection Test",
+  timestamp: new Date().toISOString()
+})
+.then(docRef => {
+  console.log("Test document created with ID:", docRef.id);
+})
+.catch(error => {
+  console.error("Error creating test document:", error);
+});
+
+
 document.addEventListener("DOMContentLoaded", function() {
   const dashboard = document.getElementById("dashboard");
   const equipmentDetail = document.getElementById("equipmentDetail");
