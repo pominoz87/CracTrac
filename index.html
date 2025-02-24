@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Crack Inspection App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <!-- Firebase SDK (v9 modular syntax is available, but here we use compatibility scripts for simplicity) -->
+  <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore.js"></script>
+  <!-- Dexie.js for IndexedDB -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.2/dist/dexie.min.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Crack Inspection App</h1>
+  </header>
+  <main id="main-content">
+    <!-- Dashboard: Site overview, equipment list and summary -->
+    <section id="dashboard">
+      <h2>Site Overview</h2>
+      <img src="images/site_overview.jpg" alt="Site Overview" id="siteOverview">
+      <div id="equipmentList">
+        <h3>Select Equipment</h3>
+        <ul>
+          <li><button class="equipment-button" data-equipment-id="223-CH-308">223-CH-308</button></li>
+          <li><button class="equipment-button" data-equipment-id="223-CH-306">223-CH-306</button></li>
+          <li><button class="equipment-button" data-equipment-id="224-CH326">224-CH326</button></li>
+          <li><button class="equipment-button" data-equipment-id="224-CH-328">224-CH-328</button></li>
+        </ul>
+      </div>
+      <div id="summary">
+        <h3>Summary</h3>
+        <div id="summaryContent">
+          <!-- Summary content (aggregated crack counts and severity) will be generated here -->
+        </div>
+      </div>
+    </section>
+
+    <!-- Equipment Detail Page -->
+    <section id="equipmentDetail" style="display:none;">
+      <button id="backToDashboard">Back to Dashboard</button>
+      <h2 id="equipmentTitle"></h2>
+      <div id="drawingContainer" style="position: relative;">
+        <img id="equipmentDrawing" src="" alt="Equipment Drawing">
+        <!-- Crack markers will be dynamically overlaid here -->
+      </div>
+      <!-- Modal for adding a new crack (photo, note, severity) -->
+      <div id="modal" class="modal">
+        <div class="modal-content">
+          <span id="closeModal" class="close">&times;</span>
+          <h3>Add Crack Photo & Note</h3>
+          <form id="crackForm">
+            <input type="hidden" id="markerX" name="markerX">
+            <input type="hidden" id="markerY" name="markerY">
+            <label for="photoInput">Photo:</label>
+            <input type="file" id="photoInput" accept="image/*" capture="environment" required>
+            <label for="noteInput">Note:</label>
+            <textarea id="noteInput" placeholder="Enter note" required></textarea>
+            <label for="severitySelect">Severity:</label>
+            <select id="severitySelect" required>
+              <option value="1">Severe (Red)</option>
+              <option value="2">Moderate (Blue)</option>
+              <option value="3">Low (Pink)</option>
+            </select>
+            <button type="submit">Save</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Include our JS files -->
+  <script src="firebase.js"></script>
+  <script src="db.js"></script>
+  <script src="app.js"></script>
+  <script>
+    // Register the service worker for offline capability
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(registration => {
+          console.log('Service Worker registered with scope:', registration.scope);
+        })
+        .catch(error => {
+          console.log('Service Worker registration failed:', error);
+        });
+    }
+  </script>
+</body>
+</html>
