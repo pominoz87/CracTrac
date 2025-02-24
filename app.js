@@ -89,11 +89,13 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // When clicking on drawing (not on a marker), open modal to create a new crack instance
   equipmentDrawing.addEventListener("click", function(event) {
-    const rect = equipmentDrawing.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    // Open new crack modal with click coordinates
-    openCrackModal("new", { markerX: x, markerY: y });
+    // Only open new modal if click is not on an existing marker
+    if (event.target === equipmentDrawing) {
+      const rect = equipmentDrawing.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      openCrackModal("new", { markerX: x, markerY: y });
+    }
   });
 
   // Close modals
@@ -388,12 +390,11 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // New: Pull remote data from Firestore and update local IndexedDB
-  function pullRemoteData(equipmentID) {
-    dbFirestore.collection("cracks").where("equipmentID", "==", equipmentID)
-    .get().then(snapshot => {
-      snapshot.forEach(doc => {
-        const remoteCrack = doc.data();
+  // Real-time listener: When online, listen for remote changes and update local IndexedDB
+  if (navigator.onLine) {
+    dbFirestore.collection("cracks").onSnapshot(snapshot => {
+      snapshot.docChanges().forEach(change => {
+        const remoteCrack = change.doc.data();
         // Upsert remote record into local IndexedDB based on crackID
         db.cracks.where("crackID").equals(remoteCrack.crackID).toArray().then(existing => {
           if (existing.length === 0) {
@@ -406,29 +407,17 @@ document.addEventListener("DOMContentLoaded", function() {
           }
         });
       });
-      if (currentEquipmentID === equipmentID) {
-        loadCrackMarkers();
-      }
+      // Refresh UI
+      if (currentEquipmentID) loadCrackMarkers();
       renderSummary();
-    }).catch(err => {
-      console.error("Error pulling remote data: ", err);
     });
   }
 
-  // Listen for online status and sync data
+  // Also trigger a sync on online event
   window.addEventListener("online", function() {
     syncData();
-    Object.keys(equipmentData).forEach(equipmentID => {
-      pullRemoteData(equipmentID);
-    });
   });
 
-  // On initial load, if online, pull remote data for all equipment
-  if (navigator.onLine) {
-    Object.keys(equipmentData).forEach(equipmentID => {
-      pullRemoteData(equipmentID);
-    });
-  }
-
+  // Initial render of summary
   renderSummary();
 });
