@@ -388,6 +388,47 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  window.addEventListener("online", syncData);
+  // New: Pull remote data from Firestore and update local IndexedDB
+  function pullRemoteData(equipmentID) {
+    dbFirestore.collection("cracks").where("equipmentID", "==", equipmentID)
+    .get().then(snapshot => {
+      snapshot.forEach(doc => {
+        const remoteCrack = doc.data();
+        // Upsert remote record into local IndexedDB based on crackID
+        db.cracks.where("crackID").equals(remoteCrack.crackID).toArray().then(existing => {
+          if (existing.length === 0) {
+            remoteCrack.synced = true;
+            db.cracks.add(remoteCrack);
+          } else {
+            remoteCrack.id = existing[0].id;
+            remoteCrack.synced = true;
+            db.cracks.put(remoteCrack);
+          }
+        });
+      });
+      if (currentEquipmentID === equipmentID) {
+        loadCrackMarkers();
+      }
+      renderSummary();
+    }).catch(err => {
+      console.error("Error pulling remote data: ", err);
+    });
+  }
+
+  // Listen for online status and sync data
+  window.addEventListener("online", function() {
+    syncData();
+    Object.keys(equipmentData).forEach(equipmentID => {
+      pullRemoteData(equipmentID);
+    });
+  });
+
+  // On initial load, if online, pull remote data for all equipment
+  if (navigator.onLine) {
+    Object.keys(equipmentData).forEach(equipmentID => {
+      pullRemoteData(equipmentID);
+    });
+  }
+
   renderSummary();
 });
