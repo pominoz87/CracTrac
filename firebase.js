@@ -6,9 +6,9 @@ const firebaseConfig = {
   projectId: "cractrac-3629a",
   storageBucket: "cractrac-3629a.firebasestorage.app",
   messagingSenderId: "603257438362",
-  appId: "1:603257438362:web:ee551d7ff493c32165df23"
+  appId: "1:603257438362:web:ee551d7ff493c32165df23",
+  measurementId: "G-WRZ4KN552G"
 };
-
 firebase.initializeApp(firebaseConfig);
 const dbFirestore = firebase.firestore();
 
