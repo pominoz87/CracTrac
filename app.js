@@ -136,7 +136,11 @@ document.addEventListener("DOMContentLoaded", function () {
   function addNewCrack(newCrack, callback) {
     if (navigator.onLine) {
       console.log("Online: Writing new crack to Firestore:", newCrack.crackID);
-      firebase.firestore().collection("cracks").doc(newCrack.crackID).set(newCrack)
+      firebase
+        .firestore()
+        .collection("cracks")
+        .doc(newCrack.crackID)
+        .set(newCrack)
         .then(function () {
           console.log("Crack synced to Firestore:", newCrack.crackID);
           newCrack.synced = true;
@@ -160,6 +164,7 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
     if (mode === "new") {
+      // New crack modal: form to add first photo and note.
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
@@ -187,10 +192,12 @@ document.addEventListener("DOMContentLoaded", function () {
         const severity = document.getElementById("newSeveritySelect").value;
         const timestamp = new Date().toISOString();
         const file = document.getElementById("newPhotoInput").files[0];
+        console.log("New crack form submitted. File object:", file);
         if (file) {
           const reader = new FileReader();
           reader.onload = function (ev) {
             const photoData = ev.target.result;
+            console.log("File loaded. Photo data length:", photoData.length);
             db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(function (count) {
               const crackNumber = count + 1;
               const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
@@ -213,7 +220,12 @@ document.addEventListener("DOMContentLoaded", function () {
               });
             });
           };
+          reader.onerror = function (ev) {
+            console.error("Error reading file:", ev);
+          };
           reader.readAsDataURL(file);
+        } else {
+          console.error("No file selected.");
         }
         closeCrackModalFunc();
       });
