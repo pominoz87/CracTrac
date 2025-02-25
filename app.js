@@ -60,9 +60,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Load crack markers from IndexedDB for current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
-    document.querySelectorAll(".crack-marker").forEach((marker) =>
-      marker.remove()
-    );
+    document.querySelectorAll(".crack-marker").forEach((marker) => marker.remove());
     db.cracks
       .where("equipmentID")
       .equals(currentEquipmentID)
@@ -78,7 +76,6 @@ document.addEventListener("DOMContentLoaded", function () {
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
-    // Determine marker color based on lowest severity in photos
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce(
@@ -94,7 +91,7 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.position = "absolute";
     marker.style.left = (crack.markerX - 10) + "px";
     marker.style.top = (crack.markerY - 10) + "px";
-    marker.title = `${crack.crackID}`;
+    marker.title = crack.crackID;
     marker.addEventListener("click", function (event) {
       event.stopPropagation();
       console.log("Marker clicked for crack:", crack.crackID);
@@ -160,7 +157,6 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
     if (mode === "new") {
-      // New crack modal: form to add first photo and note.
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
@@ -190,20 +186,23 @@ document.addEventListener("DOMContentLoaded", function () {
         const file = document.getElementById("newPhotoInput").files[0];
         console.log("New crack form submitted. File object:", file);
         if (file) {
-          const reader = new FileReader();
-          reader.onload = function (ev) {
-            const photoData = ev.target.result;
-            console.log("File loaded. Photo data length:", photoData.length);
-            db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(function (count) {
-              const crackNumber = count + 1;
-              const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
+          // Upload file to Firebase Storage
+          db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(function (count) {
+            const crackNumber = count + 1;
+            const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
+            const storageRef = firebase.storage().ref();
+            const fileRef = storageRef.child("crack_images/" + crackID + "_" + Date.now() + "_" + file.name);
+            fileRef.put(file).then(snapshot => {
+              return snapshot.ref.getDownloadURL();
+            }).then(downloadURL => {
+              console.log("File uploaded. Download URL:", downloadURL);
               const newCrack = {
                 equipmentID: currentEquipmentID,
                 crackID: crackID,
                 markerX: markerX,
                 markerY: markerY,
                 photos: [{
-                  photoData: photoData,
+                  photoURL: downloadURL,
                   note: note,
                   severity: severity,
                   timestamp: timestamp
@@ -214,12 +213,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 loadCrackMarkers();
                 if (navigator.onLine) syncData();
               });
+            }).catch(error => {
+              console.error("Error uploading file:", error);
             });
-          };
-          reader.onerror = function (ev) {
-            console.error("Error reading file:", ev);
-          };
-          reader.readAsDataURL(file);
+          });
         } else {
           console.error("No file selected.");
         }
@@ -232,7 +229,7 @@ document.addEventListener("DOMContentLoaded", function () {
         crackData.photos.forEach((photo, index) => {
           galleryHTML += `
             <div class="gallery-item" data-index="${index}">
-              <img src="${photo.photoData}" alt="Crack Photo ${index + 1}" class="gallery-photo">
+              <img src="${photo.photoURL}" alt="Crack Photo ${index + 1}" class="gallery-photo">
               <p>Note: ${photo.note}</p>
               <p>Severity: ${photo.severity === "1" ? "Severe" : photo.severity === "2" ? "Moderate" : "Low"}</p>
               <p>Time: ${photo.timestamp}</p>
@@ -269,12 +266,15 @@ document.addEventListener("DOMContentLoaded", function () {
         const severity = document.getElementById("addSeveritySelect").value;
         const timestamp = new Date().toISOString();
         if (file) {
-          const reader = new FileReader();
-          reader.onload = function (ev) {
-            const photoData = ev.target.result;
+          const storageRef = firebase.storage().ref();
+          const fileRef = storageRef.child("crack_images/" + crackData.crackID + "_" + Date.now() + "_" + file.name);
+          fileRef.put(file).then(snapshot => {
+            return snapshot.ref.getDownloadURL();
+          }).then(downloadURL => {
+            console.log("Additional photo uploaded. Download URL:", downloadURL);
             db.cracks.get(crackData.id).then(function (record) {
               record.photos.push({
-                photoData: photoData,
+                photoURL: downloadURL,
                 note: note,
                 severity: severity,
                 timestamp: timestamp
@@ -305,8 +305,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 });
               }
             });
-          };
-          reader.readAsDataURL(file);
+          }).catch(error => {
+            console.error("Error uploading additional photo:", error);
+          });
         }
       });
       document.querySelectorAll(".delete-photo").forEach((btn) => {
@@ -369,7 +370,7 @@ document.addEventListener("DOMContentLoaded", function () {
               <div class="summary-crack-photos">
                 ${crack.photos.map((photo, index) => `
                   <div class="gallery-item" data-index="${index}">
-                    <img src="${photo.photoData}" alt="Crack Photo ${index + 1}" class="gallery-photo">
+                    <img src="${photo.photoURL}" alt="Crack Photo ${index + 1}" class="gallery-photo">
                     <p>Note: ${photo.note}</p>
                     <p>Severity: ${photo.severity === "1" ? "Severe" : photo.severity === "2" ? "Moderate" : "Low"}</p>
                     <p>Time: ${photo.timestamp}</p>
