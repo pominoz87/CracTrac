@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const summaryModalBody = document.getElementById("summaryModalBody");
   const closeSummaryModal = document.getElementById("closeSummaryModal");
 
+  const importFileInput = document.getElementById("importFileInput");
+  const importDataButton = document.getElementById("importData");
   const exportDataButton = document.getElementById("exportData");
 
   let currentEquipmentID = "";
@@ -30,7 +32,10 @@ document.addEventListener("DOMContentLoaded", function () {
     "224-CH-328": { drawing: "images/224-CH-328.jpg" },
   };
 
-  // Equipment selection buttons
+  // -----------------------------
+  // Original functionality:
+  // Equipment selection and detail view
+
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -47,7 +52,6 @@ document.addEventListener("DOMContentLoaded", function () {
     renderSummary();
   });
 
-  // Show equipment detail page
   function showEquipmentDetail(equipmentID) {
     console.log("Showing equipment detail for: " + equipmentID);
     equipmentTitle.textContent = `Equipment ${equipmentID}`;
@@ -57,7 +61,6 @@ document.addEventListener("DOMContentLoaded", function () {
     loadCrackMarkers();
   }
 
-  // Load crack markers from IndexedDB for current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
     document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
@@ -67,18 +70,16 @@ document.addEventListener("DOMContentLoaded", function () {
     }).catch(err => console.error("Error loading cracks:", err));
   }
 
-  // Render a crack marker on the drawing
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
-    // Use markerX and markerY to position the marker (adjusting by half the marker size)
     marker.style.position = "absolute";
     marker.style.width = "20px";
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
     marker.style.left = (crack.markerX - 10) + "px";
     marker.style.top = (crack.markerY - 10) + "px";
-    // Determine marker color from the most severe photo (default low severity pink)
+    // Determine marker color based on lowest severity among photos (default "3" low)
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -93,7 +94,6 @@ document.addEventListener("DOMContentLoaded", function () {
     drawingContainer.appendChild(marker);
   }
 
-  // When clicking on the drawing (not on a marker), open modal to add a new crack
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
       const rect = equipmentDrawing.getBoundingClientRect();
@@ -104,7 +104,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  // Modal close functions
   closeCrackModal.addEventListener("click", closeCrackModalFunc);
   closeSummaryModal.addEventListener("click", closeSummaryModalFunc);
   window.addEventListener("click", function (event) {
@@ -122,13 +121,13 @@ document.addEventListener("DOMContentLoaded", function () {
     summaryModalBody.innerHTML = "";
   }
 
-  // Helper: Add new crack to IndexedDB (and optionally sync to Firestore if online)
+  // Helper: Add new crack record to IndexedDB (and attempt Firestore sync if online)
   function addNewCrack(newCrack, callback) {
     if (navigator.onLine) {
-      console.log("Online: Attempting Firestore write for " + newCrack.crackID);
+      console.log("Online: Writing new crack to Firestore:", newCrack.crackID);
       firebase.firestore().collection("cracks").doc(newCrack.crackID).set(newCrack)
         .then(() => {
-          console.log("Firestore write successful for " + newCrack.crackID);
+          console.log("Crack synced to Firestore:", newCrack.crackID);
           newCrack.synced = true;
           return db.cracks.add(newCrack);
         })
@@ -147,10 +146,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Open crack modal (new or edit)
   function openCrackModal(mode, crackData) {
-    console.log("Opening crack modal in " + mode + " mode.");
+    console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
     if (mode === "new") {
-      // New crack form
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
@@ -180,12 +178,12 @@ document.addEventListener("DOMContentLoaded", function () {
         const file = document.getElementById("newPhotoInput").files[0];
         console.log("New crack form submitted. File:", file);
         if (file) {
-          // Use FileReader to convert the file to Base64 (this works on mobile)
+          // Use FileReader to convert file to Base64 string
           const reader = new FileReader();
           reader.onload = function (ev) {
             const photoData = ev.target.result;
-            console.log("File read complete. Length:", photoData.length);
-            // Determine a crack number (by counting existing cracks for this equipment)
+            console.log("File read complete, length:", photoData.length);
+            // Determine crack number by counting existing cracks for this equipment
             db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(count => {
               const crackNumber = count + 1;
               const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
@@ -217,14 +215,13 @@ document.addEventListener("DOMContentLoaded", function () {
         closeCrackModalFunc();
       });
     } else if (mode === "edit") {
-      // Edit existing crack – show gallery and form to add additional photo
       let galleryHTML = `<h3>Edit Crack: ${crackData.crackID}</h3>`;
       if (crackData.photos && crackData.photos.length > 0) {
         galleryHTML += `<div id="photoGallery">`;
         crackData.photos.forEach((photo, index) => {
           galleryHTML += `
             <div class="gallery-item" data-index="${index}">
-              <img src="${photo.photoData}" alt="Crack Photo ${index + 1}" class="gallery-photo">
+              <img src="${photo.photoData}" alt="Photo ${index + 1}" class="gallery-photo">
               <p>Note: ${photo.note}</p>
               <p>Severity: ${photo.severity === "1" ? "Severe" : photo.severity === "2" ? "Moderate" : "Low"}</p>
               <p>Time: ${photo.timestamp}</p>
@@ -293,7 +290,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
       });
       document.getElementById("deleteCrack").addEventListener("click", function () {
-        if (confirm("Delete this crack?")) {
+        if (confirm("Are you sure you want to delete this crack?")) {
           db.cracks.delete(crackData.id).then(() => {
             loadCrackMarkers();
             closeCrackModalFunc();
@@ -303,7 +300,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Open summary modal (listing cracks for an equipment)
+  // Open summary modal for an equipment (if needed)
   function openSummaryModal(equipmentID) {
     summaryModal.style.display = "block";
     summaryModalBody.innerHTML = `<h3>Edit Summary for ${equipmentID}</h3>`;
@@ -318,7 +315,7 @@ document.addEventListener("DOMContentLoaded", function () {
               <div class="summary-crack-photos">
                 ${crack.photos.map((photo, index) => `
                   <div class="gallery-item" data-index="${index}">
-                    <img src="${photo.photoData}" alt="Crack Photo ${index + 1}" class="gallery-photo">
+                    <img src="${photo.photoData}" alt="Photo ${index + 1}" class="gallery-photo">
                     <p>Note: ${photo.note}</p>
                     <p>Severity: ${photo.severity === "1" ? "Severe" : photo.severity === "2" ? "Moderate" : "Low"}</p>
                     <p>Time: ${photo.timestamp}</p>
@@ -394,7 +391,10 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Force export data to zip file (from IndexedDB)
+  // ----------------------------
+  // Data Export and Import Functions
+
+  // Export all crack data from IndexedDB into a zip file containing cracks.json
   function exportDataToZip() {
     db.cracks.toArray().then(cracks => {
       console.log("Exporting " + cracks.length + " cracks to zip.");
@@ -412,14 +412,93 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Export Data button listener
-  if (exportDataButton) {
-    exportDataButton.addEventListener("click", function () {
-      console.log("Export Data button clicked");
-      exportDataToZip();
+  // Import crack data from a selected JSON file into IndexedDB (clearing previous data)
+  function importDataFromFile() {
+    const file = importFileInput.files[0];
+    if (!file) {
+      alert("Please select a JSON file to import.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        const importedData = JSON.parse(e.target.result);
+        // Clear existing data and bulk add imported records
+        db.cracks.clear().then(() => {
+          return db.cracks.bulkAdd(importedData);
+        }).then(() => {
+          console.log("Import complete.");
+          renderSummary();
+          if (currentEquipmentID) {
+            loadCrackMarkers();
+          }
+        }).catch(err => {
+          console.error("Error during import:", err);
+        });
+      } catch (err) {
+        alert("Error parsing JSON: " + err);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // Event listeners for import/export buttons
+  exportDataButton.addEventListener("click", function () {
+    console.log("Export Data button clicked.");
+    exportDataToZip();
+  });
+
+  importDataButton.addEventListener("click", function () {
+    console.log("Import Data button clicked.");
+    importDataFromFile();
+  });
+
+  // ----------------------------
+  // Real-time Firestore Listener (if needed)
+  if (navigator.onLine) {
+    firebase.firestore().collection("cracks").onSnapshot(snapshot => {
+      console.log("onSnapshot triggered");
+      snapshot.docChanges().forEach(change => {
+        const remoteCrack = change.doc.data();
+        db.cracks.where("crackID").equals(remoteCrack.crackID).toArray().then(existing => {
+          if (existing.length === 0) {
+            remoteCrack.synced = true;
+            db.cracks.add(remoteCrack);
+          } else {
+            remoteCrack.id = existing[0].id;
+            remoteCrack.synced = true;
+            db.cracks.put(remoteCrack);
+          }
+        });
+      });
+      if (currentEquipmentID) loadCrackMarkers();
+      renderSummary();
     });
   }
 
+  // Sync unsynced records from IndexedDB to Firestore (if online)
+  function syncData() {
+    console.log("Syncing unsynced records");
+    db.cracks.where("synced").equals(false).toArray().then(cracks => {
+      cracks.forEach(crack => {
+        firebase.firestore().collection("cracks").doc(crack.crackID).set(crack)
+          .then(() => {
+            console.log("Synced crack:", crack.crackID);
+            db.cracks.update(crack.id, { synced: true });
+            renderSummary();
+          })
+          .catch(error => {
+            console.error("Sync error for", crack.crackID, ":", error);
+          });
+      });
+    });
+  }
+  
+  window.addEventListener("online", function () {
+    console.log("Online event triggered");
+    syncData();
+  });
+  
   // Initial render of summary
   renderSummary();
 });
