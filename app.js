@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // ---------------------------
   // Original Offline Functionality
   
+  // Equipment selection
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -59,6 +60,7 @@ document.addEventListener("DOMContentLoaded", function () {
     equipmentDrawing.src = equipmentData[equipmentID].drawing;
     dashboard.style.display = "none";
     equipmentDetail.style.display = "block";
+    // Wait for image to load to get natural dimensions
     equipmentDrawing.onload = function () {
       loadCrackMarkers();
     };
@@ -73,7 +75,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }).catch(err => console.error("Error loading cracks:", err));
   }
   
-  // Render markers using natural coordinates stored in the record
+  // Render a crack marker using natural coordinates stored in the record
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
@@ -82,13 +84,13 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
     
-    // Get displayed dimensions and position of the equipment image
+    // Get the displayed position and dimensions of the equipment image
     const imgRect = equipmentDrawing.getBoundingClientRect();
     const containerRect = drawingContainer.getBoundingClientRect();
     const offsetLeft = imgRect.left - containerRect.left;
     const offsetTop = imgRect.top - containerRect.top;
     
-    // Calculate marker position based on natural coordinates stored as naturalX, naturalY
+    // Calculate normalized position based on natural coordinates stored as naturalX, naturalY
     const normX = crack.naturalX / equipmentDrawing.naturalWidth;
     const normY = crack.naturalY / equipmentDrawing.naturalHeight;
     const displayX = offsetLeft + normX * imgRect.width;
@@ -96,6 +98,7 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.left = (displayX - 10) + "px";
     marker.style.top = (displayY - 10) + "px";
     
+    // Determine marker color based on lowest severity among photos
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -110,12 +113,13 @@ document.addEventListener("DOMContentLoaded", function () {
     drawingContainer.appendChild(marker);
   }
   
+  // When clicking on the equipment drawing, compute natural coordinates from click position
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
       const imgRect = equipmentDrawing.getBoundingClientRect();
       const clickX = event.clientX - imgRect.left;
       const clickY = event.clientY - imgRect.top;
-      // Convert displayed click coordinates to natural coordinates
+      // Convert displayed coordinates to natural coordinates
       const naturalX = clickX * (equipmentDrawing.naturalWidth / imgRect.width);
       const naturalY = clickY * (equipmentDrawing.naturalHeight / imgRect.height);
       console.log("Drawing clicked at natural coordinates:", naturalX.toFixed(2), naturalY.toFixed(2));
@@ -452,12 +456,11 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   
   // ---------------------------
-  // Generate Report Feature
+  // Generate Report Feature (PDF generation)
   
-  // Report generation: Using jsPDF and html2canvas
-  generateReportButton.addEventListener("click", function () {
+  generateReportButton.addEventListener("click", async function () {
     console.log("Generate Report button clicked.");
-    generateReport();
+    await generateReport();
   });
   
   async function generateReport() {
@@ -465,7 +468,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF();
     
-    // Group cracks by equipment
+    // Group cracks by equipment using data from IndexedDB
     const equipmentMap = {};
     const allCracks = await db.cracks.toArray();
     allCracks.forEach(crack => {
@@ -473,10 +476,10 @@ document.addEventListener("DOMContentLoaded", function () {
       equipmentMap[crack.equipmentID].push(crack);
     });
     
+    // Process each equipment in the order defined by equipmentData
     const equipmentIDs = Object.keys(equipmentData);
     let firstPage = true;
     for (const equipID of equipmentIDs) {
-      // Add a new page for each equipment except the first
       if (!firstPage) {
         pdf.addPage();
       }
@@ -485,24 +488,30 @@ document.addEventListener("DOMContentLoaded", function () {
       pdf.setFontSize(18);
       pdf.text(`Equipment: ${equipID}`, 10, 20);
       
-      // Display the equipment drawing with markers
-      // Set the drawing image source
-      const drawingSrc = equipmentData[equipID].drawing;
-      // Create an image element and wait for it to load
+      // Create a temporary container off-screen (positioned off-screen)
+      const tempContainer = document.createElement("div");
+      tempContainer.style.position = "absolute";
+      tempContainer.style.top = "-10000px";
+      tempContainer.style.left = "-10000px";
+      // Set container size to the equipment drawing's natural dimensions
+      // (Adjust as needed to match your image's natural size)
+      tempContainer.style.width = equipmentDrawing.naturalWidth + "px";
+      tempContainer.style.height = equipmentDrawing.naturalHeight + "px";
+      document.body.appendChild(tempContainer);
+      
+      // Create an image element for the equipment drawing
       const img = new Image();
-      img.src = drawingSrc;
+      img.src = equipmentData[equipID].drawing;
       await new Promise((resolve) => {
         img.onload = resolve;
         img.onerror = resolve;
       });
-      // Create a temporary container with the image and markers
-      const tempContainer = document.createElement("div");
-      tempContainer.style.position = "relative";
-      tempContainer.style.width = img.width + "px";
-      tempContainer.style.height = img.height + "px";
+      // Force image to display at its natural dimensions
+      img.width = img.naturalWidth;
+      img.height = img.naturalHeight;
       tempContainer.appendChild(img);
       
-      // Add markers for this equipment
+      // Add markers for cracks on this equipment using natural coordinates
       if (equipmentMap[equipID]) {
         equipmentMap[equipID].forEach(crack => {
           const marker = document.createElement("div");
@@ -511,7 +520,7 @@ document.addEventListener("DOMContentLoaded", function () {
           marker.style.height = "20px";
           marker.style.borderRadius = "50%";
           marker.style.border = "2px solid white";
-          // Calculate position in natural image dimensions
+          // Position marker using natural coordinates
           const posX = crack.naturalX - 10;
           const posY = crack.naturalY - 10;
           marker.style.left = posX + "px";
@@ -521,35 +530,42 @@ document.addEventListener("DOMContentLoaded", function () {
             severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
           }
           marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
-          // Add crack name text next to marker
+          tempContainer.appendChild(marker);
+          
+          // Add a text label next to the marker
           const label = document.createElement("div");
           label.textContent = crack.crackID;
           label.style.position = "absolute";
           label.style.left = (posX + 22) + "px";
           label.style.top = posY + "px";
+          label.style.fontSize = "12px";
           label.style.color = "black";
-          label.style.fontSize = "10px";
-          tempContainer.appendChild(marker);
           tempContainer.appendChild(label);
         });
       }
       
-      // Use html2canvas to capture the container as an image
-      const canvas = await html2canvas(tempContainer, { scale: 2 });
+      // Wait a moment to ensure the container is rendered
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Capture the container as an image using html2canvas
+      const canvas = await html2canvas(tempContainer, { scale: 2, useCORS: true });
       const imgData = canvas.toDataURL("image/jpeg", 1.0);
-      // Add the annotated drawing to the PDF
-      // Scale the image to fit within PDF page width (assuming 190 mm available)
+      
+      // Remove the temporary container from the DOM
+      document.body.removeChild(tempContainer);
+      
+      // Calculate dimensions to fit within the PDF page (with 10mm margins)
       const pageWidth = pdf.internal.pageSize.getWidth() - 20;
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = pageWidth;
       const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
       pdf.addImage(imgData, "JPEG", 10, 30, imgWidth, imgHeight);
       
-      // List cracks in numerical order below the drawing
+      // List cracks below the drawing
       let startY = 30 + imgHeight + 10;
       pdf.setFontSize(12);
       if (equipmentMap[equipID] && equipmentMap[equipID].length > 0) {
-        // Sort cracks by crackID numerical suffix (assuming format "EquipmentID-CrackN")
+        // Sort cracks by numerical order based on crackID suffix
         const sortedCracks = equipmentMap[equipID].sort((a, b) => {
           const numA = parseInt(a.crackID.split("Crack")[1]);
           const numB = parseInt(b.crackID.split("Crack")[1]);
@@ -558,13 +574,11 @@ document.addEventListener("DOMContentLoaded", function () {
         sortedCracks.forEach(crack => {
           pdf.text(`Crack: ${crack.crackID}`, 10, startY);
           startY += 6;
-          // List each photo (if more than one, list sequentially)
           crack.photos.forEach((photo, idx) => {
             pdf.text(`Photo ${idx+1}: Note: ${photo.note}, Severity: ${photo.severity}`, 10, startY);
             startY += 6;
           });
           startY += 4;
-          // If the startY exceeds page height, add a new page and reset startY.
           if (startY > pdf.internal.pageSize.getHeight() - 20) {
             pdf.addPage();
             startY = 20;
@@ -575,7 +589,6 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
     
-    // Provide a download link for the generated PDF
     pdf.save("CracTrac_Report.pdf");
     console.log("Report generated and downloaded.");
   }
