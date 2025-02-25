@@ -1,70 +1,104 @@
 /* style.css */
+
+/* General Styles */
 body {
   font-family: Arial, sans-serif;
   margin: 0;
-  padding: 0;
+  padding: 10px;
 }
 header, main {
-  padding: 20px;
-}
-.crack-marker {
-  cursor: pointer;
-  border: 2px solid white;
+  padding: 10px;
 }
 
-/* Modal styling */
+/* Dashboard and Equipment List */
+#equipmentList ul {
+  list-style: none;
+  padding: 0;
+}
+#equipmentList li {
+  margin: 5px 0;
+}
+.equipment-button {
+  padding: 8px 12px;
+  font-size: 16px;
+}
+
+/* Drawing Container and Markers */
+#drawingContainer {
+  position: relative;
+}
+#drawingContainer img {
+  max-width: 100%;
+}
+.crack-marker {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid white;
+  cursor: pointer;
+}
+
+/* Modals */
 .modal {
-  display: none; 
-  position: fixed; 
+  display: none;
+  position: fixed;
   z-index: 1000;
-  padding-top: 100px; 
   left: 0;
   top: 0;
   width: 100%;
-  height: 100%; 
-  overflow: auto; 
+  height: 100%;
+  overflow: auto;
   background-color: rgba(0,0,0,0.4);
 }
 .modal-content {
   background-color: #fefefe;
-  margin: auto;
+  margin: 10% auto;
   padding: 20px;
   border: 1px solid #888;
   width: 90%;
   max-width: 500px;
-  position: relative;
 }
 .close {
-  color: #aaa;
-  position: absolute;
-  top: 10px;
-  right: 15px;
+  float: right;
   font-size: 28px;
-  font-weight: bold;
   cursor: pointer;
 }
-.close:hover,
-.close:focus {
-  color: black;
-  text-decoration: none;
-  cursor: pointer;
-}
-.gallery-item {
-  border: 1px solid #ddd;
-  margin: 10px 0;
-  padding: 5px;
-}
-.gallery-photo {
-  max-width: 100%;
-  height: auto;
-}
-.summary-item {
-  border: 1px solid #ccc;
+
+/* Instructions Section */
+#instructions {
+  margin-top: 20px;
   padding: 10px;
-  margin: 10px 0;
+  background-color: #eef;
+  border: 1px solid #99c;
 }
-.summary-crack-item {
-  border: 1px solid #ddd;
+
+/* Mobile Optimized Styles */
+body.mobile {
+  padding-top: 50px; /* Ensure content doesn't get hidden under the address bar */
+}
+body.mobile header {
+  font-size: 20px;
+}
+body.mobile .equipment-button {
+  font-size: 18px;
+  padding: 10px 14px;
+}
+body.mobile #instructions {
+  font-size: 16px;
+}
+
+/* Mobile banner message */
+.mobile-banner {
+  background-color: #fffae6;
+  color: #665c00;
   padding: 10px;
-  margin: 10px 0;
+  text-align: center;
+  font-size: 16px;
+  border-bottom: 1px solid #e6d800;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 2000;
 }
