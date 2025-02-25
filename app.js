@@ -34,9 +34,8 @@ document.addEventListener("DOMContentLoaded", function () {
   };
   
   // ---------------------------
-  // Original Offline Functionality
+  // Equipment selection and detail view
   
-  // Equipment selection
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -59,12 +58,16 @@ document.addEventListener("DOMContentLoaded", function () {
     equipmentDrawing.src = equipmentData[equipmentID].drawing;
     dashboard.style.display = "none";
     equipmentDetail.style.display = "block";
-    loadCrackMarkers();
+    // Wait for image to load so we have proper dimensions:
+    equipmentDrawing.onload = function () {
+      loadCrackMarkers();
+    };
   }
   
   // Load crack markers from IndexedDB for the current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
+    // Remove existing markers
     document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
     db.cracks.where("equipmentID").equals(currentEquipmentID).toArray().then(cracks => {
       console.log("Found " + cracks.length + " cracks for " + currentEquipmentID);
@@ -72,7 +75,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }).catch(err => console.error("Error loading cracks:", err));
   }
   
-  // Render a crack marker using natural coordinates stored in the record
+  // Render a crack marker – use natural coordinates stored in the record and the image's current displayed position
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
@@ -80,14 +83,23 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.width = "20px";
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
-    // Get current displayed dimensions of the equipment drawing
-    const displayedWidth = equipmentDrawing.clientWidth;
-    const displayedHeight = equipmentDrawing.clientHeight;
-    // Calculate marker position based on natural coordinates
-    const markerX = (crack.naturalX / equipmentDrawing.naturalWidth) * displayedWidth;
-    const markerY = (crack.naturalY / equipmentDrawing.naturalHeight) * displayedHeight;
-    marker.style.left = (markerX - 10) + "px";
-    marker.style.top = (markerY - 10) + "px";
+    
+    // Get the displayed position and dimensions of the equipment image
+    const imgRect = equipmentDrawing.getBoundingClientRect();
+    const containerRect = drawingContainer.getBoundingClientRect();
+    // The image might be centered within its container – compute its offset:
+    const offsetLeft = imgRect.left - containerRect.left;
+    const offsetTop = imgRect.top - containerRect.top;
+    
+    // Calculate normalized coordinates stored in crack (naturalX, naturalY are in terms of the image's natural dimensions)
+    const normX = crack.naturalX / equipmentDrawing.naturalWidth;
+    const normY = crack.naturalY / equipmentDrawing.naturalHeight;
+    // Calculate the marker's displayed position:
+    const displayX = offsetLeft + normX * imgRect.width;
+    const displayY = offsetTop + normY * imgRect.height;
+    marker.style.left = (displayX - 10) + "px";
+    marker.style.top = (displayY - 10) + "px";
+    
     // Determine marker color from lowest severity among photos
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
@@ -103,15 +115,15 @@ document.addEventListener("DOMContentLoaded", function () {
     drawingContainer.appendChild(marker);
   }
   
-  // When clicking on the equipment drawing, store position relative to the natural dimensions
+  // When clicking on the equipment drawing, compute natural coordinates from click position
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
-      const rect = equipmentDrawing.getBoundingClientRect();
-      const clickX = event.clientX - rect.left;
-      const clickY = event.clientY - rect.top;
-      // Convert displayed click coordinates to natural coordinates
-      const naturalX = clickX * (equipmentDrawing.naturalWidth / rect.width);
-      const naturalY = clickY * (equipmentDrawing.naturalHeight / rect.height);
+      const imgRect = equipmentDrawing.getBoundingClientRect();
+      const clickX = event.clientX - imgRect.left;
+      const clickY = event.clientY - imgRect.top;
+      // Convert displayed coordinates to natural coordinates
+      const naturalX = clickX * (equipmentDrawing.naturalWidth / imgRect.width);
+      const naturalY = clickY * (equipmentDrawing.naturalHeight / imgRect.height);
       console.log("Drawing clicked at natural coordinates:", naturalX.toFixed(2), naturalY.toFixed(2));
       openCrackModal("new", { naturalX: naturalX, naturalY: naturalY });
     }
@@ -124,11 +136,13 @@ document.addEventListener("DOMContentLoaded", function () {
     if (event.target === crackModal) closeCrackModalFunc();
     if (event.target === summaryModal) closeSummaryModalFunc();
   });
+  
   function closeCrackModalFunc() {
     console.log("Closing crack modal.");
     crackModal.style.display = "none";
     crackModalBody.innerHTML = "";
   }
+  
   function closeSummaryModalFunc() {
     console.log("Closing summary modal.");
     summaryModal.style.display = "none";
@@ -141,11 +155,12 @@ document.addEventListener("DOMContentLoaded", function () {
     db.cracks.add(newCrack).then(callback);
   }
   
-  // Open crack modal (for new crack or editing an existing crack)
+  // Open crack modal (for new or edit)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
     if (mode === "new") {
+      // New crack form: store natural coordinates
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
@@ -421,9 +436,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }).then(() => {
           console.log("Import complete.");
           renderSummary();
-          if (currentEquipmentID) {
-            loadCrackMarkers();
-          }
+          if (currentEquipmentID) loadCrackMarkers();
         }).catch(err => {
           console.error("Error during import:", err);
         });
