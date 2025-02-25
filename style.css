@@ -44,7 +44,8 @@ header {
   position: relative;
   margin-top: 10px;
 }
-#drawingContainer img {
+#equipmentDrawing {
+  /* For desktop, you may still want it responsive */
   max-width: 100%;
   height: auto;
   display: block;
@@ -127,7 +128,7 @@ header {
 
 /* Mobile Optimized Styles */
 body.mobile {
-  padding-top: 50px; /* Avoid content hidden behind the address bar */
+  padding-top: 50px; /* Ensure content isn't hidden behind the address bar */
 }
 body.mobile header {
   font-size: 20px;
@@ -153,4 +154,10 @@ body.mobile #instructions {
   left: 0;
   width: 100%;
   z-index: 2000;
+}
+
+/* IMPORTANT: For mobile, do not resize the equipment drawing image */
+body.mobile #equipmentDrawing {
+  width: auto;
+  max-width: none;
 }
