@@ -53,7 +53,6 @@ document.addEventListener("DOMContentLoaded", function () {
     renderSummary();
   });
   
-  // Show detail view for selected equipment
   function showEquipmentDetail(equipmentID) {
     console.log("Showing equipment detail for: " + equipmentID);
     equipmentTitle.textContent = `Equipment ${equipmentID}`;
@@ -63,7 +62,7 @@ document.addEventListener("DOMContentLoaded", function () {
     loadCrackMarkers();
   }
   
-  // Load markers from IndexedDB
+  // Load crack markers from IndexedDB for the current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
     document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
@@ -73,7 +72,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }).catch(err => console.error("Error loading cracks:", err));
   }
   
-  // Render marker using normalized coordinates (normX, normY)
+  // Render a crack marker using natural coordinates stored in the record
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
@@ -81,12 +80,15 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.width = "20px";
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
-    // Calculate absolute position based on the current displayed image dimensions
-    const imgWidth = equipmentDrawing.clientWidth;
-    const imgHeight = equipmentDrawing.clientHeight;
-    marker.style.left = (crack.normX * imgWidth - 10) + "px";
-    marker.style.top = (crack.normY * imgHeight - 10) + "px";
-    // Determine marker color based on lowest severity among photos
+    // Get current displayed dimensions of the equipment drawing
+    const displayedWidth = equipmentDrawing.clientWidth;
+    const displayedHeight = equipmentDrawing.clientHeight;
+    // Calculate marker position based on natural coordinates
+    const markerX = (crack.naturalX / equipmentDrawing.naturalWidth) * displayedWidth;
+    const markerY = (crack.naturalY / equipmentDrawing.naturalHeight) * displayedHeight;
+    marker.style.left = (markerX - 10) + "px";
+    marker.style.top = (markerY - 10) + "px";
+    // Determine marker color from lowest severity among photos
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -101,16 +103,17 @@ document.addEventListener("DOMContentLoaded", function () {
     drawingContainer.appendChild(marker);
   }
   
-  // When clicking on the drawing, calculate normalized coordinates and open new crack modal
+  // When clicking on the equipment drawing, store position relative to the natural dimensions
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
       const rect = equipmentDrawing.getBoundingClientRect();
       const clickX = event.clientX - rect.left;
       const clickY = event.clientY - rect.top;
-      const normX = clickX / rect.width;
-      const normY = clickY / rect.height;
-      console.log("Drawing clicked at (normalized):", normX.toFixed(2), normY.toFixed(2));
-      openCrackModal("new", { normX: normX, normY: normY });
+      // Convert displayed click coordinates to natural coordinates
+      const naturalX = clickX * (equipmentDrawing.naturalWidth / rect.width);
+      const naturalY = clickY * (equipmentDrawing.naturalHeight / rect.height);
+      console.log("Drawing clicked at natural coordinates:", naturalX.toFixed(2), naturalY.toFixed(2));
+      openCrackModal("new", { naturalX: naturalX, naturalY: naturalY });
     }
   });
   
@@ -132,23 +135,22 @@ document.addEventListener("DOMContentLoaded", function () {
     summaryModalBody.innerHTML = "";
   }
   
-  // Helper: Add new crack to IndexedDB (offline only)
+  // Helper: Add new crack record to IndexedDB (offline-only)
   function addNewCrack(newCrack, callback) {
-    newCrack.synced = false; // For offline-only, this remains false
+    newCrack.synced = false;
     db.cracks.add(newCrack).then(callback);
   }
   
-  // Open crack modal for "new" or "edit"
+  // Open crack modal (for new crack or editing an existing crack)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
     if (mode === "new") {
-      // New crack form uses normalized coordinates
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
-          <input type="hidden" id="newNormX" value="${crackData.normX}">
-          <input type="hidden" id="newNormY" value="${crackData.normY}">
+          <input type="hidden" id="newNaturalX" value="${crackData.naturalX}">
+          <input type="hidden" id="newNaturalY" value="${crackData.naturalY}">
           <label for="newPhotoInput">Photo:</label>
           <input type="file" id="newPhotoInput" accept="image/*" capture="environment" required>
           <label for="newNoteInput">Note:</label>
@@ -165,8 +167,8 @@ document.addEventListener("DOMContentLoaded", function () {
       crackModalBody.innerHTML = formHTML;
       document.getElementById("newCrackForm").addEventListener("submit", function (e) {
         e.preventDefault();
-        const normX = parseFloat(document.getElementById("newNormX").value);
-        const normY = parseFloat(document.getElementById("newNormY").value);
+        const naturalX = parseFloat(document.getElementById("newNaturalX").value);
+        const naturalY = parseFloat(document.getElementById("newNaturalY").value);
         const note = document.getElementById("newNoteInput").value;
         const severity = document.getElementById("newSeveritySelect").value;
         const timestamp = new Date().toISOString();
@@ -177,16 +179,14 @@ document.addEventListener("DOMContentLoaded", function () {
           reader.onload = function (ev) {
             const photoData = ev.target.result;
             console.log("File read complete, length:", photoData.length);
-            // Determine crack number by counting existing cracks for this equipment
             db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(count => {
               const crackNumber = count + 1;
               const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
               const newCrack = {
                 equipmentID: currentEquipmentID,
                 crackID: crackID,
-                // Store normalized coordinates
-                normX: normX,
-                normY: normY,
+                naturalX: naturalX,
+                naturalY: naturalY,
                 photos: [{
                   photoData: photoData,
                   note: note,
@@ -210,7 +210,6 @@ document.addEventListener("DOMContentLoaded", function () {
         closeCrackModalFunc();
       });
     } else if (mode === "edit") {
-      // Edit mode: display crack details and option to add additional photo
       let galleryHTML = `<h3>Edit Crack: ${crackData.crackID}</h3>`;
       if (crackData.photos && crackData.photos.length > 0) {
         galleryHTML += `<div id="photoGallery">`;
@@ -296,7 +295,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
   
-  // Optional: Open summary modal for editing (if needed)
+  // Optional: Open summary modal for an equipment (if needed)
   function openSummaryModal(equipmentID) {
     summaryModal.style.display = "block";
     summaryModalBody.innerHTML = `<h3>Edit Summary for ${equipmentID}</h3>`;
@@ -387,7 +386,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   
-  // --------------------------
+  // ------------------------
   // Data Export and Import Functions
   
   function exportDataToZip() {
@@ -422,7 +421,9 @@ document.addEventListener("DOMContentLoaded", function () {
         }).then(() => {
           console.log("Import complete.");
           renderSummary();
-          if (currentEquipmentID) loadCrackMarkers();
+          if (currentEquipmentID) {
+            loadCrackMarkers();
+          }
         }).catch(err => {
           console.error("Error during import:", err);
         });
