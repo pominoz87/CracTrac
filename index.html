@@ -2,95 +2,224 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CracTrac - Crack Inspection App</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
-  <!-- Firebase SDK using compat versions (we load these even though sync isn’t our focus now) -->
-  <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-storage-compat.js"></script>
-  <!-- Dexie.js for IndexedDB -->
-  <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.2/dist/dexie.min.js"></script>
-  <!-- JSZip for export functionality -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js"></script>
+  <title>CracTrac Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    #fileSection { margin-bottom: 20px; }
+    #equipmentList ul { list-style: none; padding: 0; }
+    #equipmentList li { margin: 5px 0; }
+    .equipment-button { padding: 5px 10px; }
+    #equipmentDetail { display: none; }
+    #drawingContainer { position: relative; }
+    #drawingContainer img { max-width: 100%; }
+    .crack-marker {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid white;
+      cursor: pointer;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 500px;
+    }
+    .close { float: right; font-size: 28px; cursor: pointer; }
+    .gallery-item { margin-bottom: 10px; }
+    .gallery-item img { max-width: 100%; }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>CracTrac - Crack Inspection App</h1>
-  </header>
-  <main id="main-content">
-    <!-- Dashboard -->
-    <section id="dashboard">
-      <h2>Site Overview</h2>
-      <img src="images/site_overview.jpg" alt="Site Overview" id="siteOverview">
-      <div id="equipmentList">
-        <h3>Select Equipment</h3>
-        <ul>
-          <li><button class="equipment-button" data-equipment-id="223-CH-308">223-CH-308</button></li>
-          <li><button class="equipment-button" data-equipment-id="223-CH-306">223-CH-306</button></li>
-          <li><button class="equipment-button" data-equipment-id="224-CH326">224-CH326</button></li>
-          <li><button class="equipment-button" data-equipment-id="224-CH-328">224-CH-328</button></li>
-        </ul>
-      </div>
-      <div id="summary">
-        <h3>Summary</h3>
-        <div id="summaryContent">
-          <!-- Summary content generated here -->
-        </div>
-      </div>
-      <!-- Buttons -->
-      <div id="syncSection">
-        <!-- For now, we disable Firestore sync on mobile; use export instead -->
-        <button id="exportData">Export Data</button>
-      </div>
-    </section>
-
-    <!-- Equipment Detail Page -->
-    <section id="equipmentDetail" style="display:none;">
-      <button id="backToDashboard">Back to Dashboard</button>
+  <h1>CracTrac Viewer</h1>
+  
+  <!-- Import Section -->
+  <div id="fileSection">
+    <input type="file" id="jsonFileInput" accept="application/json">
+    <button id="loadData">Import JSON</button>
+  </div>
+  
+  <!-- Main viewer; hidden until JSON is imported -->
+  <div id="viewer" style="display:none;">
+    <div id="equipmentList">
+      <h2>Equipment List</h2>
+      <ul id="equipmentButtons"></ul>
+    </div>
+    <div id="summary">
+      <h2>Summary</h2>
+      <div id="summaryContent"></div>
+    </div>
+    <div id="equipmentDetail">
+      <button id="backToList">Back to Equipment List</button>
       <h2 id="equipmentTitle"></h2>
-      <div id="drawingContainer" style="position: relative;">
+      <div id="drawingContainer">
         <img id="equipmentDrawing" src="" alt="Equipment Drawing">
-        <!-- Markers will be added here -->
-      </div>
-    </section>
-
-    <!-- Modal for adding/editing a crack -->
-    <div id="crackModal" class="modal">
-      <div class="modal-content">
-        <span id="closeCrackModal" class="close">&times;</span>
-        <div id="crackModalBody">
-          <!-- Form content generated here -->
-        </div>
       </div>
     </div>
-
-    <!-- Modal for editing summary -->
-    <div id="summaryModal" class="modal">
-      <div class="modal-content">
-        <span id="closeSummaryModal" class="close">&times;</span>
-        <div id="summaryModalBody">
-          <!-- Summary edit content generated here -->
-        </div>
-      </div>
+  </div>
+  
+  <!-- Modal for crack details -->
+  <div id="crackModal" class="modal">
+    <div class="modal-content">
+      <span id="closeCrackModal" class="close">&times;</span>
+      <div id="crackModalBody"></div>
     </div>
-  </main>
-
-  <!-- Include JS files -->
-  <script src="firebase.js"></script>
-  <script src="db.js"></script>
-  <script src="app.js"></script>
+  </div>
+  
   <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js')
-        .then(registration => {
-          console.log('Service Worker registered with scope:', registration.scope);
-        })
-        .catch(error => {
-          console.log('Service Worker registration failed:', error);
-        });
+    let exportedData = []; // Array of crack records imported from JSON
+
+    // Adjust these paths to point to your equipment drawings
+    const equipmentDrawings = {
+      "223-CH-308": "images/223-CH-308.jpg",
+      "223-CH-306": "images/223-CH-306.jpg",
+      "224-CH326": "images/224-CH326.jpg",
+      "224-CH-328": "images/224-CH-328.jpg"
+    };
+
+    const jsonInput = document.getElementById("jsonFileInput");
+    const loadDataBtn = document.getElementById("loadData");
+    const viewerDiv = document.getElementById("viewer");
+    const equipmentButtonsUl = document.getElementById("equipmentButtons");
+    const summaryContentDiv = document.getElementById("summaryContent");
+    const equipmentDetailDiv = document.getElementById("equipmentDetail");
+    const equipmentTitleH2 = document.getElementById("equipmentTitle");
+    const equipmentDrawingImg = document.getElementById("equipmentDrawing");
+    const drawingContainer = document.getElementById("drawingContainer");
+    const backToListBtn = document.getElementById("backToList");
+    const crackModal = document.getElementById("crackModal");
+    const crackModalBody = document.getElementById("crackModalBody");
+    const closeCrackModal = document.getElementById("closeCrackModal");
+
+    // Listener for Import button
+    loadDataBtn.addEventListener("click", function(){
+      const file = jsonInput.files[0];
+      if (!file) { alert("Please select a JSON file."); return; }
+      const reader = new FileReader();
+      reader.onload = function(e){
+        try {
+          exportedData = JSON.parse(e.target.result);
+          initViewer();
+        } catch(err){
+          alert("Error parsing JSON: " + err);
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    function initViewer(){
+      viewerDiv.style.display = "block";
+      buildEquipmentList();
+      buildSummary();
     }
+
+    function buildEquipmentList(){
+      // Group cracks by equipmentID
+      const equipmentMap = {};
+      exportedData.forEach(crack => {
+        if (!equipmentMap[crack.equipmentID]) equipmentMap[crack.equipmentID] = [];
+        equipmentMap[crack.equipmentID].push(crack);
+      });
+      equipmentButtonsUl.innerHTML = "";
+      Object.keys(equipmentMap).forEach(equipmentID => {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.textContent = equipmentID;
+        btn.className = "equipment-button";
+        btn.addEventListener("click", function(){
+          showEquipmentDetail(equipmentID, equipmentMap[equipmentID]);
+        });
+        li.appendChild(btn);
+        equipmentButtonsUl.appendChild(li);
+      });
+    }
+
+    function buildSummary(){
+      // Build summary from the imported data
+      const equipmentMap = {};
+      exportedData.forEach(crack => {
+        if (!equipmentMap[crack.equipmentID]) equipmentMap[crack.equipmentID] = [];
+        equipmentMap[crack.equipmentID].push(crack);
+      });
+      summaryContentDiv.innerHTML = "";
+      Object.keys(equipmentMap).forEach(equipmentID => {
+        const cracks = equipmentMap[equipmentID];
+        const severe = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "1")).length;
+        const moderate = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "2")).length;
+        const low = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "3")).length;
+        const div = document.createElement("div");
+        div.innerHTML = `<strong>${equipmentID}</strong> - Total Cracks: ${cracks.length}<br>
+          Severe: ${severe}, Moderate: ${moderate}, Low: ${low}`;
+        summaryContentDiv.appendChild(div);
+      });
+    }
+
+    function showEquipmentDetail(equipmentID, cracks){
+      equipmentTitleH2.textContent = equipmentID;
+      equipmentDrawingImg.src = equipmentDrawings[equipmentID] || "";
+      document.getElementById("equipmentList").style.display = "none";
+      document.getElementById("summary").style.display = "none";
+      equipmentDetailDiv.style.display = "block";
+      // Clear previous markers
+      const markers = drawingContainer.querySelectorAll(".crack-marker");
+      markers.forEach(marker => marker.remove());
+      // Add markers for cracks
+      cracks.forEach(crack => {
+        const marker = document.createElement("div");
+        marker.className = "crack-marker";
+        marker.style.left = (crack.markerX - 10) + "px";
+        marker.style.top = (crack.markerY - 10) + "px";
+        let severity = "3";
+        if (crack.photos && crack.photos.length > 0) {
+          severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
+        }
+        marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
+        marker.title = crack.crackID;
+        marker.addEventListener("click", function(){
+          openCrackModal(crack);
+        });
+        drawingContainer.appendChild(marker);
+      });
+    }
+
+    backToListBtn.addEventListener("click", function(){
+      equipmentDetailDiv.style.display = "none";
+      document.getElementById("equipmentList").style.display = "block";
+      document.getElementById("summary").style.display = "block";
+    });
+
+    function openCrackModal(crack){
+      crackModal.style.display = "block";
+      let html = `<h3>${crack.crackID}</h3>`;
+      crack.photos.forEach((photo, index) => {
+        html += `<div class="gallery-item">
+          <img src="${photo.photoData}" alt="Photo ${index+1}">
+          <p>Note: ${photo.note}</p>
+          <p>Severity: ${photo.severity}</p>
+          <p>Time: ${photo.timestamp}</p>
+        </div>`;
+      });
+      crackModalBody.innerHTML = html;
+    }
+
+    document.getElementById("closeCrackModal").addEventListener("click", function(){
+      crackModal.style.display = "none";
+    });
   </script>
 </body>
 </html>
