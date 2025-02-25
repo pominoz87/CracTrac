@@ -60,7 +60,6 @@ document.addEventListener("DOMContentLoaded", function () {
     equipmentDrawing.src = equipmentData[equipmentID].drawing;
     dashboard.style.display = "none";
     equipmentDetail.style.display = "block";
-    // Wait for image to load to get natural dimensions
     equipmentDrawing.onload = function () {
       loadCrackMarkers();
     };
@@ -84,7 +83,7 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
     
-    // Get the displayed position and dimensions of the equipment image
+    // Get displayed position and dimensions of the equipment image
     const imgRect = equipmentDrawing.getBoundingClientRect();
     const containerRect = drawingContainer.getBoundingClientRect();
     const offsetLeft = imgRect.left - containerRect.left;
@@ -98,7 +97,6 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.left = (displayX - 10) + "px";
     marker.style.top = (displayY - 10) + "px";
     
-    // Determine marker color based on lowest severity among photos
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -119,7 +117,6 @@ document.addEventListener("DOMContentLoaded", function () {
       const imgRect = equipmentDrawing.getBoundingClientRect();
       const clickX = event.clientX - imgRect.left;
       const clickY = event.clientY - imgRect.top;
-      // Convert displayed coordinates to natural coordinates
       const naturalX = clickX * (equipmentDrawing.naturalWidth / imgRect.width);
       const naturalY = clickY * (equipmentDrawing.naturalHeight / imgRect.height);
       console.log("Drawing clicked at natural coordinates:", naturalX.toFixed(2), naturalY.toFixed(2));
@@ -152,7 +149,7 @@ document.addEventListener("DOMContentLoaded", function () {
     db.cracks.add(newCrack).then(callback);
   }
   
-  // Open crack modal (new or edit)
+  // Open crack modal (for new or edit)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
@@ -456,7 +453,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   
   // ---------------------------
-  // Generate Report Feature (PDF generation)
+  // Generate Report Feature
   
   generateReportButton.addEventListener("click", async function () {
     console.log("Generate Report button clicked.");
@@ -468,7 +465,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF();
     
-    // Group cracks by equipment using data from IndexedDB
+    // Group cracks by equipment from IndexedDB
     const equipmentMap = {};
     const allCracks = await db.cracks.toArray();
     allCracks.forEach(crack => {
@@ -476,7 +473,6 @@ document.addEventListener("DOMContentLoaded", function () {
       equipmentMap[crack.equipmentID].push(crack);
     });
     
-    // Process each equipment in the order defined by equipmentData
     const equipmentIDs = Object.keys(equipmentData);
     let firstPage = true;
     for (const equipID of equipmentIDs) {
@@ -493,25 +489,21 @@ document.addEventListener("DOMContentLoaded", function () {
       tempContainer.style.position = "absolute";
       tempContainer.style.top = "-10000px";
       tempContainer.style.left = "-10000px";
-      // Set container size to the equipment drawing's natural dimensions
-      // (Adjust as needed to match your image's natural size)
-      tempContainer.style.width = equipmentDrawing.naturalWidth + "px";
-      tempContainer.style.height = equipmentDrawing.naturalHeight + "px";
-      document.body.appendChild(tempContainer);
-      
-      // Create an image element for the equipment drawing
-      const img = new Image();
-      img.src = equipmentData[equipID].drawing;
+      // Set container size to the natural dimensions of the equipment drawing
+      // Use the natural dimensions of the image loaded from equipmentData
+      const tempImg = new Image();
+      tempImg.src = equipmentData[equipID].drawing;
       await new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
+        tempImg.onload = resolve;
+        tempImg.onerror = resolve;
       });
-      // Force image to display at its natural dimensions
-      img.width = img.naturalWidth;
-      img.height = img.naturalHeight;
-      tempContainer.appendChild(img);
+      tempContainer.style.width = tempImg.naturalWidth + "px";
+      tempContainer.style.height = tempImg.naturalHeight + "px";
+      tempImg.width = tempImg.naturalWidth;
+      tempImg.height = tempImg.naturalHeight;
+      tempContainer.appendChild(tempImg);
       
-      // Add markers for cracks on this equipment using natural coordinates
+      // Add markers for cracks on this equipment (using natural coordinates)
       if (equipmentMap[equipID]) {
         equipmentMap[equipID].forEach(crack => {
           const marker = document.createElement("div");
@@ -520,7 +512,6 @@ document.addEventListener("DOMContentLoaded", function () {
           marker.style.height = "20px";
           marker.style.borderRadius = "50%";
           marker.style.border = "2px solid white";
-          // Position marker using natural coordinates
           const posX = crack.naturalX - 10;
           const posY = crack.naturalY - 10;
           marker.style.left = posX + "px";
@@ -532,7 +523,7 @@ document.addEventListener("DOMContentLoaded", function () {
           marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
           tempContainer.appendChild(marker);
           
-          // Add a text label next to the marker
+          // Add label next to marker
           const label = document.createElement("div");
           label.textContent = crack.crackID;
           label.style.position = "absolute";
@@ -547,25 +538,24 @@ document.addEventListener("DOMContentLoaded", function () {
       // Wait a moment to ensure the container is rendered
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Capture the container as an image using html2canvas
+      // Capture the container as an image using html2canvas, using PNG format
       const canvas = await html2canvas(tempContainer, { scale: 2, useCORS: true });
-      const imgData = canvas.toDataURL("image/jpeg", 1.0);
+      const imgData = canvas.toDataURL("image/png");
       
       // Remove the temporary container from the DOM
       document.body.removeChild(tempContainer);
       
-      // Calculate dimensions to fit within the PDF page (with 10mm margins)
+      // Calculate dimensions to fit within the PDF page
       const pageWidth = pdf.internal.pageSize.getWidth() - 20;
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = pageWidth;
       const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-      pdf.addImage(imgData, "JPEG", 10, 30, imgWidth, imgHeight);
+      pdf.addImage(imgData, "PNG", 10, 30, imgWidth, imgHeight);
       
       // List cracks below the drawing
       let startY = 30 + imgHeight + 10;
       pdf.setFontSize(12);
       if (equipmentMap[equipID] && equipmentMap[equipID].length > 0) {
-        // Sort cracks by numerical order based on crackID suffix
         const sortedCracks = equipmentMap[equipID].sort((a, b) => {
           const numA = parseInt(a.crackID.split("Crack")[1]);
           const numB = parseInt(b.crackID.split("Crack")[1]);
