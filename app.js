@@ -1,6 +1,7 @@
 // app.js
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("App loaded.");
+  console.log("App loaded (Offline Only).");
+  
   // Element references
   const dashboard = document.getElementById("dashboard");
   const equipmentDetail = document.getElementById("equipmentDetail");
@@ -9,33 +10,32 @@ document.addEventListener("DOMContentLoaded", function () {
   const equipmentDrawing = document.getElementById("equipmentDrawing");
   const drawingContainer = document.getElementById("drawingContainer");
   const summaryContent = document.getElementById("summaryContent");
-
+  
   const crackModal = document.getElementById("crackModal");
   const crackModalBody = document.getElementById("crackModalBody");
   const closeCrackModal = document.getElementById("closeCrackModal");
-
+  
   const summaryModal = document.getElementById("summaryModal");
   const summaryModalBody = document.getElementById("summaryModalBody");
   const closeSummaryModal = document.getElementById("closeSummaryModal");
-
+  
   const importFileInput = document.getElementById("importFileInput");
   const importDataButton = document.getElementById("importData");
   const exportDataButton = document.getElementById("exportData");
-
+  
   let currentEquipmentID = "";
-
-  // Equipment data: mapping equipmentID to drawing image URL
+  
+  // Equipment data: mapping equipmentID to drawing image URL (adjust paths as needed)
   const equipmentData = {
     "223-CH-308": { drawing: "images/223-CH-308.jpg" },
     "223-CH-306": { drawing: "images/223-CH-306.jpg" },
     "224-CH326": { drawing: "images/224-CH326.jpg" },
     "224-CH-328": { drawing: "images/224-CH-328.jpg" },
   };
-
-  // -----------------------------
-  // Original functionality:
+  
+  // -----------------------
+  // Original Offline Functionality
   // Equipment selection and detail view
-
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -44,14 +44,14 @@ document.addEventListener("DOMContentLoaded", function () {
       showEquipmentDetail(equipmentID);
     });
   });
-
+  
   backToDashboardBtn.addEventListener("click", function () {
     console.log("Back to Dashboard clicked.");
     equipmentDetail.style.display = "none";
     dashboard.style.display = "block";
     renderSummary();
   });
-
+  
   function showEquipmentDetail(equipmentID) {
     console.log("Showing equipment detail for: " + equipmentID);
     equipmentTitle.textContent = `Equipment ${equipmentID}`;
@@ -60,7 +60,7 @@ document.addEventListener("DOMContentLoaded", function () {
     equipmentDetail.style.display = "block";
     loadCrackMarkers();
   }
-
+  
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
     document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
@@ -69,7 +69,7 @@ document.addEventListener("DOMContentLoaded", function () {
       cracks.forEach(crack => renderCrackMarker(crack));
     }).catch(err => console.error("Error loading cracks:", err));
   }
-
+  
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
@@ -79,7 +79,6 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.borderRadius = "50%";
     marker.style.left = (crack.markerX - 10) + "px";
     marker.style.top = (crack.markerY - 10) + "px";
-    // Determine marker color based on lowest severity among photos (default "3" low)
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -93,7 +92,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     drawingContainer.appendChild(marker);
   }
-
+  
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
       const rect = equipmentDrawing.getBoundingClientRect();
@@ -103,47 +102,33 @@ document.addEventListener("DOMContentLoaded", function () {
       openCrackModal("new", { markerX: x, markerY: y });
     }
   });
-
+  
   closeCrackModal.addEventListener("click", closeCrackModalFunc);
   closeSummaryModal.addEventListener("click", closeSummaryModalFunc);
   window.addEventListener("click", function (event) {
     if (event.target === crackModal) closeCrackModalFunc();
     if (event.target === summaryModal) closeSummaryModalFunc();
   });
+  
   function closeCrackModalFunc() {
     console.log("Closing crack modal.");
     crackModal.style.display = "none";
     crackModalBody.innerHTML = "";
   }
+  
   function closeSummaryModalFunc() {
     console.log("Closing summary modal.");
     summaryModal.style.display = "none";
     summaryModalBody.innerHTML = "";
   }
-
-  // Helper: Add new crack record to IndexedDB (and attempt Firestore sync if online)
+  
+  // Helper: Add new crack to IndexedDB (offline-only)
   function addNewCrack(newCrack, callback) {
-    if (navigator.onLine) {
-      console.log("Online: Writing new crack to Firestore:", newCrack.crackID);
-      firebase.firestore().collection("cracks").doc(newCrack.crackID).set(newCrack)
-        .then(() => {
-          console.log("Crack synced to Firestore:", newCrack.crackID);
-          newCrack.synced = true;
-          return db.cracks.add(newCrack);
-        })
-        .then(callback)
-        .catch(error => {
-          console.error("Error writing to Firestore:", error);
-          newCrack.synced = false;
-          return db.cracks.add(newCrack).then(callback);
-        });
-    } else {
-      console.log("Offline: Saving " + newCrack.crackID + " locally.");
-      newCrack.synced = false;
-      db.cracks.add(newCrack).then(callback);
-    }
+    // Offline mode: simply add the record
+    newCrack.synced = false;
+    db.cracks.add(newCrack).then(callback);
   }
-
+  
   // Open crack modal (new or edit)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
@@ -178,12 +163,10 @@ document.addEventListener("DOMContentLoaded", function () {
         const file = document.getElementById("newPhotoInput").files[0];
         console.log("New crack form submitted. File:", file);
         if (file) {
-          // Use FileReader to convert file to Base64 string
           const reader = new FileReader();
           reader.onload = function (ev) {
             const photoData = ev.target.result;
             console.log("File read complete, length:", photoData.length);
-            // Determine crack number by counting existing cracks for this equipment
             db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(count => {
               const crackNumber = count + 1;
               const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
@@ -299,8 +282,8 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
   }
-
-  // Open summary modal for an equipment (if needed)
+  
+  // Optional: Open summary modal for an equipment (if needed)
   function openSummaryModal(equipmentID) {
     summaryModal.style.display = "block";
     summaryModalBody.innerHTML = `<h3>Edit Summary for ${equipmentID}</h3>`;
@@ -363,7 +346,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-
+  
   // Render summary on dashboard
   function renderSummary() {
     console.log("Rendering summary");
@@ -390,11 +373,10 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-
-  // ----------------------------
+  
+  // ------------------------
   // Data Export and Import Functions
-
-  // Export all crack data from IndexedDB into a zip file containing cracks.json
+  
   function exportDataToZip() {
     db.cracks.toArray().then(cracks => {
       console.log("Exporting " + cracks.length + " cracks to zip.");
@@ -411,8 +393,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-
-  // Import crack data from a selected JSON file into IndexedDB (clearing previous data)
+  
   function importDataFromFile() {
     const file = importFileInput.files[0];
     if (!file) {
@@ -423,7 +404,6 @@ document.addEventListener("DOMContentLoaded", function () {
     reader.onload = function (e) {
       try {
         const importedData = JSON.parse(e.target.result);
-        // Clear existing data and bulk add imported records
         db.cracks.clear().then(() => {
           return db.cracks.bulkAdd(importedData);
         }).then(() => {
@@ -441,62 +421,15 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     reader.readAsText(file);
   }
-
-  // Event listeners for import/export buttons
+  
   exportDataButton.addEventListener("click", function () {
     console.log("Export Data button clicked.");
     exportDataToZip();
   });
-
+  
   importDataButton.addEventListener("click", function () {
     console.log("Import Data button clicked.");
     importDataFromFile();
-  });
-
-  // ----------------------------
-  // Real-time Firestore Listener (if needed)
-  if (navigator.onLine) {
-    firebase.firestore().collection("cracks").onSnapshot(snapshot => {
-      console.log("onSnapshot triggered");
-      snapshot.docChanges().forEach(change => {
-        const remoteCrack = change.doc.data();
-        db.cracks.where("crackID").equals(remoteCrack.crackID).toArray().then(existing => {
-          if (existing.length === 0) {
-            remoteCrack.synced = true;
-            db.cracks.add(remoteCrack);
-          } else {
-            remoteCrack.id = existing[0].id;
-            remoteCrack.synced = true;
-            db.cracks.put(remoteCrack);
-          }
-        });
-      });
-      if (currentEquipmentID) loadCrackMarkers();
-      renderSummary();
-    });
-  }
-
-  // Sync unsynced records from IndexedDB to Firestore (if online)
-  function syncData() {
-    console.log("Syncing unsynced records");
-    db.cracks.where("synced").equals(false).toArray().then(cracks => {
-      cracks.forEach(crack => {
-        firebase.firestore().collection("cracks").doc(crack.crackID).set(crack)
-          .then(() => {
-            console.log("Synced crack:", crack.crackID);
-            db.cracks.update(crack.id, { synced: true });
-            renderSummary();
-          })
-          .catch(error => {
-            console.error("Sync error for", crack.crackID, ":", error);
-          });
-      });
-    });
-  }
-  
-  window.addEventListener("online", function () {
-    console.log("Online event triggered");
-    syncData();
   });
   
   // Initial render of summary
