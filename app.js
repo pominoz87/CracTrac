@@ -136,11 +136,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function addNewCrack(newCrack, callback) {
     if (navigator.onLine) {
       console.log("Online: Writing new crack to Firestore:", newCrack.crackID);
-      firebase
-        .firestore()
-        .collection("cracks")
-        .doc(newCrack.crackID)
-        .set(newCrack)
+      firebase.firestore().collection("cracks").doc(newCrack.crackID).set(newCrack)
         .then(function () {
           console.log("Crack synced to Firestore:", newCrack.crackID);
           newCrack.synced = true;
@@ -518,6 +514,15 @@ document.addEventListener("DOMContentLoaded", function () {
     console.log("Online event triggered");
     syncData();
   });
+
+  // Force Sync Button Listener
+  const forceSyncButton = document.getElementById("forceSync");
+  if (forceSyncButton) {
+    forceSyncButton.addEventListener("click", function () {
+      console.log("Force Sync button clicked");
+      syncData();
+    });
+  }
 
   // Initial render of summary
   renderSummary();

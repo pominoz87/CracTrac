@@ -17,7 +17,7 @@
     <h1>CracTrac - Crack Inspection App</h1>
   </header>
   <main id="main-content">
-    <!-- Dashboard: Site overview, equipment list and summary -->
+    <!-- Dashboard: Site overview, equipment list, summary, and sync button -->
     <section id="dashboard">
       <h2>Site Overview</h2>
       <img src="images/site_overview.jpg" alt="Site Overview" id="siteOverview">
@@ -36,6 +36,10 @@
           <!-- Summary content will be generated here -->
         </div>
       </div>
+      <!-- Force Sync Button -->
+      <div id="syncSection">
+        <button id="forceSync">Force Sync to Firestore</button>
+      </div>
     </section>
 
     <!-- Equipment Detail Page -->
@@ -47,23 +51,6 @@
         <!-- Crack markers will be dynamically added here -->
       </div>
     </section>
-<button id="testWrite">Test Firestore Write</button>
-<div id="testError"></div>
-<script>
-  document.getElementById("testWrite").addEventListener("click", function() {
-    firebase.firestore().collection("testCollection").add({
-      testField: "Hello from iPhone",
-      timestamp: new Date().toISOString()
-    })
-    .then(docRef => {
-      alert("Test document written with ID: " + docRef.id);
-    })
-    .catch(error => {
-      console.error("Test write error:", error);
-      document.getElementById("testError").textContent = "Error: " + error.code + " " + error.message;
-    });
-  });
-</script>
 
     <!-- Modal for adding/editing a crack (individual crack modal) -->
     <div id="crackModal" class="modal">
@@ -84,7 +71,6 @@
         </div>
       </div>
     </div>
-
   </main>
 
   <!-- Include JS files -->
