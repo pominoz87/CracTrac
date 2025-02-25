@@ -22,7 +22,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const importFileInput = document.getElementById("importFileInput");
   const importDataButton = document.getElementById("importData");
   const exportDataButton = document.getElementById("exportData");
-  const generateReportButton = document.getElementById("generateReport");
   
   let currentEquipmentID = "";
   
@@ -35,9 +34,8 @@ document.addEventListener("DOMContentLoaded", function () {
   };
   
   // ---------------------------
-  // Original Offline Functionality
+  // Equipment selection and detail view
   
-  // Equipment selection
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -60,13 +58,16 @@ document.addEventListener("DOMContentLoaded", function () {
     equipmentDrawing.src = equipmentData[equipmentID].drawing;
     dashboard.style.display = "none";
     equipmentDetail.style.display = "block";
+    // Wait for image to load so we have proper dimensions:
     equipmentDrawing.onload = function () {
       loadCrackMarkers();
     };
   }
   
+  // Load crack markers from IndexedDB for the current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
+    // Remove existing markers
     document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
     db.cracks.where("equipmentID").equals(currentEquipmentID).toArray().then(cracks => {
       console.log("Found " + cracks.length + " cracks for " + currentEquipmentID);
@@ -74,7 +75,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }).catch(err => console.error("Error loading cracks:", err));
   }
   
-  // Render a crack marker using stored natural coordinates
+  // Render a crack marker – use natural coordinates stored in the record and the image's current displayed position
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
@@ -83,20 +84,23 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
     
-    // Get displayed dimensions and position of the equipment image
+    // Get the displayed position and dimensions of the equipment image
     const imgRect = equipmentDrawing.getBoundingClientRect();
     const containerRect = drawingContainer.getBoundingClientRect();
+    // The image might be centered within its container – compute its offset:
     const offsetLeft = imgRect.left - containerRect.left;
     const offsetTop = imgRect.top - containerRect.top;
     
-    // Calculate marker position based on stored natural coordinates
+    // Calculate normalized coordinates stored in crack (naturalX, naturalY are in terms of the image's natural dimensions)
     const normX = crack.naturalX / equipmentDrawing.naturalWidth;
     const normY = crack.naturalY / equipmentDrawing.naturalHeight;
+    // Calculate the marker's displayed position:
     const displayX = offsetLeft + normX * imgRect.width;
     const displayY = offsetTop + normY * imgRect.height;
     marker.style.left = (displayX - 10) + "px";
     marker.style.top = (displayY - 10) + "px";
     
+    // Determine marker color from lowest severity among photos
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -111,12 +115,13 @@ document.addEventListener("DOMContentLoaded", function () {
     drawingContainer.appendChild(marker);
   }
   
-  // When clicking on the equipment drawing, compute natural coordinates
+  // When clicking on the equipment drawing, compute natural coordinates from click position
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
       const imgRect = equipmentDrawing.getBoundingClientRect();
       const clickX = event.clientX - imgRect.left;
       const clickY = event.clientY - imgRect.top;
+      // Convert displayed coordinates to natural coordinates
       const naturalX = clickX * (equipmentDrawing.naturalWidth / imgRect.width);
       const naturalY = clickY * (equipmentDrawing.naturalHeight / imgRect.height);
       console.log("Drawing clicked at natural coordinates:", naturalX.toFixed(2), naturalY.toFixed(2));
@@ -124,6 +129,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
   
+  // Modal close functions
   closeCrackModal.addEventListener("click", closeCrackModalFunc);
   closeSummaryModal.addEventListener("click", closeSummaryModalFunc);
   window.addEventListener("click", function (event) {
@@ -149,11 +155,12 @@ document.addEventListener("DOMContentLoaded", function () {
     db.cracks.add(newCrack).then(callback);
   }
   
-  // Open crack modal (new or edit)
+  // Open crack modal (for new or edit)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
     if (mode === "new") {
+      // New crack form: store natural coordinates
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
@@ -394,7 +401,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
   
-  // ---------------------------
+  // ------------------------
   // Data Export and Import Functions
   
   function exportDataToZip() {
@@ -429,4 +436,27 @@ document.addEventListener("DOMContentLoaded", function () {
         }).then(() => {
           console.log("Import complete.");
           renderSummary();
-       
+          if (currentEquipmentID) loadCrackMarkers();
+        }).catch(err => {
+          console.error("Error during import:", err);
+        });
+      } catch (err) {
+        alert("Error parsing JSON: " + err);
+      }
+    };
+    reader.readAsText(file);
+  }
+  
+  exportDataButton.addEventListener("click", function () {
+    console.log("Export Data button clicked.");
+    exportDataToZip();
+  });
+  
+  importDataButton.addEventListener("click", function () {
+    console.log("Import Data button clicked.");
+    importDataFromFile();
+  });
+  
+  // Initial render of summary
+  renderSummary();
+});
