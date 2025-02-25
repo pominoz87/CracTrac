@@ -60,7 +60,9 @@ document.addEventListener("DOMContentLoaded", function () {
   // Load crack markers from IndexedDB for current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
-    document.querySelectorAll(".crack-marker").forEach((marker) => marker.remove());
+    document.querySelectorAll(".crack-marker").forEach((marker) =>
+      marker.remove()
+    );
     db.cracks
       .where("equipmentID")
       .equals(currentEquipmentID)
@@ -522,6 +524,37 @@ document.addEventListener("DOMContentLoaded", function () {
     forceSyncButton.addEventListener("click", function () {
       console.log("Force Sync button clicked");
       syncData();
+    });
+  }
+
+  // Export Data Button Listener - exports all crack data from IndexedDB into a zip file
+  const exportDataButton = document.getElementById("exportData");
+  if (exportDataButton) {
+    exportDataButton.addEventListener("click", function () {
+      console.log("Export Data button clicked");
+      exportDataToZip();
+    });
+  }
+
+  // Function to export all data from IndexedDB to a zip file
+  function exportDataToZip() {
+    db.cracks.toArray().then(function(cracks) {
+      console.log("Exporting " + cracks.length + " cracks to zip.");
+      const zip = new JSZip();
+      // Add a JSON file with the data (including photoURL strings)
+      zip.file("cracks.json", JSON.stringify(cracks, null, 2));
+      // Optionally, if you want to extract images into a folder, you could do so.
+      // For now, the JSON file contains all the data.
+      zip.generateAsync({type:"blob"}).then(function(content) {
+        // Trigger download of the zip file
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(content);
+        link.download = "CracTrac_Data.zip";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log("Export complete.");
+      });
     });
   }
 
