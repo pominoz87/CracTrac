@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const summaryModalBody = document.getElementById("summaryModalBody");
   const closeSummaryModal = document.getElementById("closeSummaryModal");
 
+  const exportDataButton = document.getElementById("exportData");
+
   let currentEquipmentID = "";
 
   // Equipment data: mapping equipmentID to drawing image URL
@@ -29,9 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
   };
 
   // Equipment selection buttons
-  const equipmentButtons = document.querySelectorAll(".equipment-button");
-  console.log("Found " + equipmentButtons.length + " equipment buttons.");
-  equipmentButtons.forEach((button) => {
+  document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
       console.log("Equipment button clicked: " + equipmentID);
@@ -60,55 +60,46 @@ document.addEventListener("DOMContentLoaded", function () {
   // Load crack markers from IndexedDB for current equipment
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
-    document.querySelectorAll(".crack-marker").forEach((marker) =>
-      marker.remove()
-    );
-    db.cracks
-      .where("equipmentID")
-      .equals(currentEquipmentID)
-      .toArray()
-      .then((cracks) => {
-        console.log("Found " + cracks.length + " cracks for equipment " + currentEquipmentID);
-        cracks.forEach((crack) => renderCrackMarker(crack));
-      })
-      .catch((err) => console.error("Error loading cracks:", err));
+    document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
+    db.cracks.where("equipmentID").equals(currentEquipmentID).toArray().then(cracks => {
+      console.log("Found " + cracks.length + " cracks for " + currentEquipmentID);
+      cracks.forEach(crack => renderCrackMarker(crack));
+    }).catch(err => console.error("Error loading cracks:", err));
   }
 
-  // Render a crack marker on the equipment drawing
+  // Render a crack marker on the drawing
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
     marker.className = "crack-marker";
-    let severity = "3";
-    if (crack.photos && crack.photos.length > 0) {
-      severity = crack.photos.reduce(
-        (min, photo) => Math.min(min, parseInt(photo.severity)),
-        3
-      ).toString();
-    }
-    const color = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
-    marker.style.backgroundColor = color;
+    // Use markerX and markerY to position the marker (adjusting by half the marker size)
+    marker.style.position = "absolute";
     marker.style.width = "20px";
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
-    marker.style.position = "absolute";
     marker.style.left = (crack.markerX - 10) + "px";
     marker.style.top = (crack.markerY - 10) + "px";
+    // Determine marker color from the most severe photo (default low severity pink)
+    let severity = "3";
+    if (crack.photos && crack.photos.length > 0) {
+      severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
+    }
+    marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
     marker.title = crack.crackID;
     marker.addEventListener("click", function (event) {
       event.stopPropagation();
-      console.log("Marker clicked for crack:", crack.crackID);
+      console.log("Marker clicked for " + crack.crackID);
       openCrackModal("edit", crack);
     });
     drawingContainer.appendChild(marker);
   }
 
-  // When clicking on the equipment drawing (not on a marker), open modal to create a new crack
+  // When clicking on the drawing (not on a marker), open modal to add a new crack
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
       const rect = equipmentDrawing.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
-      console.log("Drawing clicked at:", x, y);
+      console.log("Drawing clicked at: ", x, y);
       openCrackModal("new", { markerX: x, markerY: y });
     }
   });
@@ -131,34 +122,35 @@ document.addEventListener("DOMContentLoaded", function () {
     summaryModalBody.innerHTML = "";
   }
 
-  // Helper: Write a new crack record to Firestore if online; otherwise, store locally
+  // Helper: Add new crack to IndexedDB (and optionally sync to Firestore if online)
   function addNewCrack(newCrack, callback) {
     if (navigator.onLine) {
-      console.log("Online: Writing new crack to Firestore:", newCrack.crackID);
+      console.log("Online: Attempting Firestore write for " + newCrack.crackID);
       firebase.firestore().collection("cracks").doc(newCrack.crackID).set(newCrack)
-        .then(function () {
-          console.log("Crack synced to Firestore:", newCrack.crackID);
+        .then(() => {
+          console.log("Firestore write successful for " + newCrack.crackID);
           newCrack.synced = true;
           return db.cracks.add(newCrack);
         })
         .then(callback)
-        .catch(function (error) {
-          console.error("Error writing new crack to Firestore:", error);
+        .catch(error => {
+          console.error("Error writing to Firestore:", error);
           newCrack.synced = false;
           return db.cracks.add(newCrack).then(callback);
         });
     } else {
-      console.log("Offline: Storing new crack locally:", newCrack.crackID);
+      console.log("Offline: Saving " + newCrack.crackID + " locally.");
       newCrack.synced = false;
       db.cracks.add(newCrack).then(callback);
     }
   }
 
-  // Open crack modal in "new" or "edit" mode
+  // Open crack modal (new or edit)
   function openCrackModal(mode, crackData) {
-    console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
+    console.log("Opening crack modal in " + mode + " mode.");
     crackModal.style.display = "block";
     if (mode === "new") {
+      // New crack form
       const formHTML = `
         <h3>Add New Crack</h3>
         <form id="newCrackForm">
@@ -186,25 +178,24 @@ document.addEventListener("DOMContentLoaded", function () {
         const severity = document.getElementById("newSeveritySelect").value;
         const timestamp = new Date().toISOString();
         const file = document.getElementById("newPhotoInput").files[0];
-        console.log("New crack form submitted. File object:", file);
+        console.log("New crack form submitted. File:", file);
         if (file) {
-          // Upload file to Firebase Storage
-          db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(function (count) {
-            const crackNumber = count + 1;
-            const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
-            const storageRef = firebase.storage().ref();
-            const fileRef = storageRef.child("crack_images/" + crackID + "_" + Date.now() + "_" + file.name);
-            fileRef.put(file).then(snapshot => {
-              return snapshot.ref.getDownloadURL();
-            }).then(downloadURL => {
-              console.log("File uploaded. Download URL:", downloadURL);
+          // Use FileReader to convert the file to Base64 (this works on mobile)
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const photoData = ev.target.result;
+            console.log("File read complete. Length:", photoData.length);
+            // Determine a crack number (by counting existing cracks for this equipment)
+            db.cracks.where("equipmentID").equals(currentEquipmentID).count().then(count => {
+              const crackNumber = count + 1;
+              const crackID = `${currentEquipmentID}-Crack${crackNumber}`;
               const newCrack = {
                 equipmentID: currentEquipmentID,
                 crackID: crackID,
                 markerX: markerX,
                 markerY: markerY,
                 photos: [{
-                  photoURL: downloadURL,
+                  photoData: photoData,
                   note: note,
                   severity: severity,
                   timestamp: timestamp
@@ -213,25 +204,27 @@ document.addEventListener("DOMContentLoaded", function () {
               };
               addNewCrack(newCrack, function () {
                 loadCrackMarkers();
-                if (navigator.onLine) syncData();
               });
-            }).catch(error => {
-              console.error("Error uploading file:", error);
             });
-          });
+          };
+          reader.onerror = function (ev) {
+            console.error("Error reading file:", ev);
+          };
+          reader.readAsDataURL(file);
         } else {
           console.error("No file selected.");
         }
         closeCrackModalFunc();
       });
     } else if (mode === "edit") {
+      // Edit existing crack – show gallery and form to add additional photo
       let galleryHTML = `<h3>Edit Crack: ${crackData.crackID}</h3>`;
       if (crackData.photos && crackData.photos.length > 0) {
         galleryHTML += `<div id="photoGallery">`;
         crackData.photos.forEach((photo, index) => {
           galleryHTML += `
             <div class="gallery-item" data-index="${index}">
-              <img src="${photo.photoURL}" alt="Crack Photo ${index + 1}" class="gallery-photo">
+              <img src="${photo.photoData}" alt="Crack Photo ${index + 1}" class="gallery-photo">
               <p>Note: ${photo.note}</p>
               <p>Severity: ${photo.severity === "1" ? "Severe" : photo.severity === "2" ? "Moderate" : "Low"}</p>
               <p>Time: ${photo.timestamp}</p>
@@ -268,88 +261,41 @@ document.addEventListener("DOMContentLoaded", function () {
         const severity = document.getElementById("addSeveritySelect").value;
         const timestamp = new Date().toISOString();
         if (file) {
-          const storageRef = firebase.storage().ref();
-          const fileRef = storageRef.child("crack_images/" + crackData.crackID + "_" + Date.now() + "_" + file.name);
-          fileRef.put(file).then(snapshot => {
-            return snapshot.ref.getDownloadURL();
-          }).then(downloadURL => {
-            console.log("Additional photo uploaded. Download URL:", downloadURL);
-            db.cracks.get(crackData.id).then(function (record) {
+          const reader = new FileReader();
+          reader.onload = function (ev) {
+            const photoData = ev.target.result;
+            db.cracks.get(crackData.id).then(record => {
               record.photos.push({
-                photoURL: downloadURL,
+                photoData: photoData,
                 note: note,
                 severity: severity,
                 timestamp: timestamp
               });
-              if (navigator.onLine) {
-                firebase.firestore().collection("cracks").doc(record.crackID).set(record)
-                  .then(function () {
-                    console.log("Updated crack synced to Firestore:", record.crackID);
-                    record.synced = true;
-                    return db.cracks.put(record);
-                  })
-                  .then(function () {
-                    loadCrackMarkers();
-                    syncData();
-                    openCrackModal("edit", record);
-                  })
-                  .catch(function (error) {
-                    console.error("Error updating crack in Firestore:", error);
-                    db.cracks.put(record).then(function () {
-                      loadCrackMarkers();
-                      openCrackModal("edit", record);
-                    });
-                  });
-              } else {
-                db.cracks.put(record).then(function () {
-                  loadCrackMarkers();
-                  openCrackModal("edit", record);
-                });
-              }
-            });
-          }).catch(error => {
-            console.error("Error uploading additional photo:", error);
-          });
-        }
-      });
-      document.querySelectorAll(".delete-photo").forEach((btn) => {
-        btn.addEventListener("click", function () {
-          const index = parseInt(this.getAttribute("data-index"));
-          db.cracks.get(crackData.id).then(function (record) {
-            record.photos.splice(index, 1);
-            if (navigator.onLine) {
-              firebase.firestore().collection("cracks").doc(record.crackID).set(record)
-                .then(function () {
-                  record.synced = true;
-                  return db.cracks.put(record);
-                })
-                .then(function () {
-                  loadCrackMarkers();
-                  openCrackModal("edit", record);
-                })
-                .catch(function (error) {
-                  console.error("Error deleting photo in Firestore:", error);
-                  db.cracks.put(record).then(function () {
-                    loadCrackMarkers();
-                    openCrackModal("edit", record);
-                  });
-                });
-            } else {
-              db.cracks.put(record).then(function () {
+              db.cracks.put(record).then(() => {
                 loadCrackMarkers();
                 openCrackModal("edit", record);
               });
-            }
+            });
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+      document.querySelectorAll(".delete-photo").forEach(btn => {
+        btn.addEventListener("click", function () {
+          const index = parseInt(this.getAttribute("data-index"));
+          db.cracks.get(crackData.id).then(record => {
+            record.photos.splice(index, 1);
+            db.cracks.put(record).then(() => {
+              loadCrackMarkers();
+              openCrackModal("edit", record);
+            });
           });
         });
       });
       document.getElementById("deleteCrack").addEventListener("click", function () {
-        if (confirm("Are you sure you want to delete this crack?")) {
-          db.cracks.delete(crackData.id).then(function () {
+        if (confirm("Delete this crack?")) {
+          db.cracks.delete(crackData.id).then(() => {
             loadCrackMarkers();
-            if (navigator.onLine) {
-              firebase.firestore().collection("cracks").doc(crackData.crackID).delete().catch(console.error);
-            }
             closeCrackModalFunc();
           });
         }
@@ -357,22 +303,22 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Open summary modal for an equipment: list all cracks with options to edit or delete
+  // Open summary modal (listing cracks for an equipment)
   function openSummaryModal(equipmentID) {
     summaryModal.style.display = "block";
     summaryModalBody.innerHTML = `<h3>Edit Summary for ${equipmentID}</h3>`;
-    db.cracks.where("equipmentID").equals(equipmentID).toArray().then(function (cracks) {
+    db.cracks.where("equipmentID").equals(equipmentID).toArray().then(cracks => {
       if (cracks.length === 0) {
         summaryModalBody.innerHTML += `<p>No cracks recorded for this equipment.</p>`;
       } else {
-        cracks.forEach(function (crack) {
+        cracks.forEach(crack => {
           summaryModalBody.innerHTML += `
             <div class="summary-crack-item" data-id="${crack.id}">
               <h4>${crack.crackID}</h4>
               <div class="summary-crack-photos">
                 ${crack.photos.map((photo, index) => `
                   <div class="gallery-item" data-index="${index}">
-                    <img src="${photo.photoURL}" alt="Crack Photo ${index + 1}" class="gallery-photo">
+                    <img src="${photo.photoData}" alt="Crack Photo ${index + 1}" class="gallery-photo">
                     <p>Note: ${photo.note}</p>
                     <p>Severity: ${photo.severity === "1" ? "Severe" : photo.severity === "2" ? "Moderate" : "Low"}</p>
                     <p>Time: ${photo.timestamp}</p>
@@ -386,71 +332,47 @@ document.addEventListener("DOMContentLoaded", function () {
           `;
         });
       }
-      document.querySelectorAll(".edit-crack-summary").forEach((btn) => {
+      document.querySelectorAll(".edit-crack-summary").forEach(btn => {
         btn.addEventListener("click", function () {
           const id = parseInt(this.getAttribute("data-crack-id"));
-          db.cracks.get(id).then(function (crack) {
+          db.cracks.get(id).then(crack => {
             openCrackModal("edit", crack);
           });
         });
       });
-      document.querySelectorAll(".delete-crack-summary").forEach((btn) => {
+      document.querySelectorAll(".delete-crack-summary").forEach(btn => {
         btn.addEventListener("click", function () {
           const id = parseInt(this.getAttribute("data-crack-id"));
-          if (confirm("Are you sure you want to delete this crack?")) {
-            db.cracks.get(id).then(function (crack) {
-              db.cracks.delete(id).then(function () {
-                if (navigator.onLine && crack) {
-                  firebase.firestore().collection("cracks").doc(crack.crackID).delete().catch(console.error);
-                }
-                openSummaryModal(equipmentID);
-                loadCrackMarkers();
-              });
+          if (confirm("Delete this crack?")) {
+            db.cracks.delete(id).then(() => {
+              openSummaryModal(equipmentID);
+              loadCrackMarkers();
             });
           }
         });
       });
-      document.querySelectorAll(".delete-photo-summary").forEach((btn) => {
+      document.querySelectorAll(".delete-photo-summary").forEach(btn => {
         btn.addEventListener("click", function () {
           const id = parseInt(this.getAttribute("data-crack-id"));
           const index = parseInt(this.getAttribute("data-index"));
-          db.cracks.get(id).then(function (record) {
+          db.cracks.get(id).then(record => {
             record.photos.splice(index, 1);
-            if (navigator.onLine) {
-              firebase.firestore().collection("cracks").doc(record.crackID).set(record)
-                .then(function () {
-                  record.synced = true;
-                  return db.cracks.put(record);
-                })
-                .then(function () {
-                  openSummaryModal(equipmentID);
-                  loadCrackMarkers();
-                })
-                .catch(function (error) {
-                  console.error("Error deleting photo in summary:", error);
-                  db.cracks.put(record).then(function () {
-                    openSummaryModal(equipmentID);
-                    loadCrackMarkers();
-                  });
-                });
-            } else {
-              db.cracks.put(record).then(function () {
-                openSummaryModal(equipmentID);
-                loadCrackMarkers();
-              });
-            }
+            db.cracks.put(record).then(() => {
+              openSummaryModal(equipmentID);
+              loadCrackMarkers();
+            });
           });
         });
       });
     });
   }
 
-  // Render the summary section on the dashboard
+  // Render summary on dashboard
   function renderSummary() {
     console.log("Rendering summary");
     summaryContent.innerHTML = "";
-    Object.keys(equipmentData).forEach(function (equipmentID) {
-      db.cracks.where("equipmentID").equals(equipmentID).toArray().then(function (cracks) {
+    Object.keys(equipmentData).forEach(equipmentID => {
+      db.cracks.where("equipmentID").equals(equipmentID).toArray().then(cracks => {
         const severe = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "1")).length;
         const moderate = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "2")).length;
         const low = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "3")).length;
@@ -472,81 +394,13 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Sync unsynced records from IndexedDB to Firestore
-  function syncData() {
-    console.log("Syncing unsynced records");
-    db.cracks.where("synced").equals(false).toArray().then(function (cracks) {
-      cracks.forEach(function (crack) {
-        firebase.firestore().collection("cracks").doc(crack.crackID).set(crack)
-          .then(function () {
-            console.log("Synced crack:", crack.crackID);
-            db.cracks.update(crack.id, { synced: true });
-            renderSummary();
-          })
-          .catch(function (error) {
-            console.error("Sync error for", crack.crackID, ":", error);
-          });
-      });
-    });
-  }
-
-  // Real-time Firestore listener to update local IndexedDB on remote changes
-  if (navigator.onLine) {
-    firebase.firestore().collection("cracks").onSnapshot(function (snapshot) {
-      console.log("onSnapshot triggered");
-      snapshot.docChanges().forEach(function (change) {
-        const remoteCrack = change.doc.data();
-        db.cracks.where("crackID").equals(remoteCrack.crackID).toArray().then(function (existing) {
-          if (existing.length === 0) {
-            remoteCrack.synced = true;
-            db.cracks.add(remoteCrack);
-          } else {
-            remoteCrack.id = existing[0].id;
-            remoteCrack.synced = true;
-            db.cracks.put(remoteCrack);
-          }
-        });
-      });
-      if (currentEquipmentID) loadCrackMarkers();
-      renderSummary();
-    });
-  }
-
-  // Also trigger sync on online event
-  window.addEventListener("online", function () {
-    console.log("Online event triggered");
-    syncData();
-  });
-
-  // Force Sync Button Listener
-  const forceSyncButton = document.getElementById("forceSync");
-  if (forceSyncButton) {
-    forceSyncButton.addEventListener("click", function () {
-      console.log("Force Sync button clicked");
-      syncData();
-    });
-  }
-
-  // Export Data Button Listener - exports all crack data from IndexedDB into a zip file
-  const exportDataButton = document.getElementById("exportData");
-  if (exportDataButton) {
-    exportDataButton.addEventListener("click", function () {
-      console.log("Export Data button clicked");
-      exportDataToZip();
-    });
-  }
-
-  // Function to export all data from IndexedDB to a zip file
+  // Force export data to zip file (from IndexedDB)
   function exportDataToZip() {
-    db.cracks.toArray().then(function(cracks) {
+    db.cracks.toArray().then(cracks => {
       console.log("Exporting " + cracks.length + " cracks to zip.");
       const zip = new JSZip();
-      // Add a JSON file with the data (including photoURL strings)
       zip.file("cracks.json", JSON.stringify(cracks, null, 2));
-      // Optionally, if you want to extract images into a folder, you could do so.
-      // For now, the JSON file contains all the data.
-      zip.generateAsync({type:"blob"}).then(function(content) {
-        // Trigger download of the zip file
+      zip.generateAsync({ type: "blob" }).then(content => {
         const link = document.createElement("a");
         link.href = URL.createObjectURL(content);
         link.download = "CracTrac_Data.zip";
@@ -555,6 +409,14 @@ document.addEventListener("DOMContentLoaded", function () {
         document.body.removeChild(link);
         console.log("Export complete.");
       });
+    });
+  }
+
+  // Export Data button listener
+  if (exportDataButton) {
+    exportDataButton.addEventListener("click", function () {
+      console.log("Export Data button clicked");
+      exportDataToZip();
     });
   }
 

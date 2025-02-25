@@ -11,7 +11,6 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const dbFirestore = firebase.firestore();
-
 dbFirestore.enablePersistence()
   .catch((err) => {
     if (err.code === 'failed-precondition') {
