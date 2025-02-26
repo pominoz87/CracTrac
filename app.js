@@ -617,12 +617,12 @@ document.addEventListener("DOMContentLoaded", function () {
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Capture the container as an image using html2canvas (PNG format) with a lower scale to fit A4
+      // Capture the container as an image using html2canvas (PNG format) with scale 1
       const canvas = await html2canvas(tempContainer, { scale: 1, useCORS: true });
       const eqImgData = canvas.toDataURL("image/png");
       document.body.removeChild(tempContainer);
       
-      // Scale equipment drawing to fit within the PDF page (max width = pageWidth-40, max height = 120)
+      // Scale equipment drawing to fit within the PDF page so markers do not spill over.
       const maxImgWidth = pageWidth - 40;
       const maxImgHeight = 120;
       const imgProps = pdf.getImageProperties(eqImgData);
@@ -638,7 +638,7 @@ document.addEventListener("DOMContentLoaded", function () {
       pdf.text("Crack Details", 20, 30 + eqDisplayHeight + 10);
       let startYDetails = 30 + eqDisplayHeight + 20;
       
-      // For each crack on this equipment, list details
+      // For each crack on this equipment, list details and add photos
       const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
       if (cracks && cracks.length > 0) {
         const sortedCracks = cracks.sort((a, b) => {
@@ -658,13 +658,19 @@ document.addEventListener("DOMContentLoaded", function () {
               photoImg.crossOrigin = "Anonymous";
               photoImg.src = photo.photoData;
               await new Promise((resolve) => { photoImg.onload = resolve; photoImg.onerror = resolve; });
+              // Create a canvas and scale the photo down if necessary
+              const maxPhotoCanvasWidth = 800;
+              let scale = 1;
+              if (photoImg.naturalWidth > maxPhotoCanvasWidth) {
+                scale = maxPhotoCanvasWidth / photoImg.naturalWidth;
+              }
               const photoCanvas = document.createElement("canvas");
-              photoCanvas.width = photoImg.naturalWidth;
-              photoCanvas.height = photoImg.naturalHeight;
+              photoCanvas.width = photoImg.naturalWidth * scale;
+              photoCanvas.height = photoImg.naturalHeight * scale;
               const photoCtx = photoCanvas.getContext("2d");
-              photoCtx.drawImage(photoImg, 0, 0);
+              photoCtx.drawImage(photoImg, 0, 0, photoCanvas.width, photoCanvas.height);
               const photoImgData = photoCanvas.toDataURL("image/png");
-              // Scale the photo to a max width (e.g., 80mm)
+              // Scale the photo to a max width in the PDF (e.g., 80mm)
               const maxPhotoWidth = 80;
               const photoProps = pdf.getImageProperties(photoImgData);
               let photoWidth = photoProps.width;
