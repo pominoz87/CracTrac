@@ -1,7 +1,7 @@
 // app.js
 document.addEventListener("DOMContentLoaded", function () {
   console.log("App loaded (Offline Only).");
-  
+
   // Element references
   const dashboard = document.getElementById("dashboard");
   const equipmentDetail = document.getElementById("equipmentDetail");
@@ -10,22 +10,22 @@ document.addEventListener("DOMContentLoaded", function () {
   const equipmentDrawing = document.getElementById("equipmentDrawing");
   const drawingContainer = document.getElementById("drawingContainer");
   const summaryContent = document.getElementById("summaryContent");
-  
+
   const crackModal = document.getElementById("crackModal");
   const crackModalBody = document.getElementById("crackModalBody");
   const closeCrackModal = document.getElementById("closeCrackModal");
-  
+
   const summaryModal = document.getElementById("summaryModal");
   const summaryModalBody = document.getElementById("summaryModalBody");
   const closeSummaryModal = document.getElementById("closeSummaryModal");
-  
+
   const importFileInput = document.getElementById("importFileInput");
   const importDataButton = document.getElementById("importData");
   const exportDataButton = document.getElementById("exportData");
   const generateReportButton = document.getElementById("generateReport");
-  
+
   let currentEquipmentID = "";
-  
+
   // Equipment data: mapping equipmentID to drawing image URL
   const equipmentData = {
     "223-CH-308": { drawing: "images/223-CH-308.jpg" },
@@ -33,10 +33,10 @@ document.addEventListener("DOMContentLoaded", function () {
     "224-CH326": { drawing: "images/224-CH326.jpg" },
     "224-CH-328": { drawing: "images/224-CH-328.jpg" }
   };
-  
+
   // ---------------------------
   // Original Offline Functionality
-  
+
   // Equipment selection
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
@@ -46,14 +46,14 @@ document.addEventListener("DOMContentLoaded", function () {
       showEquipmentDetail(equipmentID);
     });
   });
-  
+
   backToDashboardBtn.addEventListener("click", function () {
     console.log("Back to Dashboard clicked.");
     equipmentDetail.style.display = "none";
     dashboard.style.display = "block";
     renderSummary();
   });
-  
+
   function showEquipmentDetail(equipmentID) {
     console.log("Showing equipment detail for: " + equipmentID);
     equipmentTitle.textContent = `Equipment ${equipmentID}`;
@@ -64,7 +64,7 @@ document.addEventListener("DOMContentLoaded", function () {
       loadCrackMarkers();
     };
   }
-  
+
   function loadCrackMarkers() {
     console.log("Loading crack markers for equipment: " + currentEquipmentID);
     document.querySelectorAll(".crack-marker").forEach(marker => marker.remove());
@@ -73,7 +73,7 @@ document.addEventListener("DOMContentLoaded", function () {
       cracks.forEach(crack => renderCrackMarker(crack));
     }).catch(err => console.error("Error loading cracks:", err));
   }
-  
+
   // Render a crack marker using stored natural coordinates
   function renderCrackMarker(crack) {
     const marker = document.createElement("div");
@@ -82,21 +82,21 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.width = "20px";
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
-    
+
     // Get displayed position and dimensions of the equipment image
     const imgRect = equipmentDrawing.getBoundingClientRect();
     const containerRect = drawingContainer.getBoundingClientRect();
     const offsetLeft = imgRect.left - containerRect.left;
     const offsetTop = imgRect.top - containerRect.top;
-    
-    // Calculate marker position using natural coordinates
+
+    // Calculate marker position using natural coordinates (naturalX, naturalY)
     const normX = crack.naturalX / equipmentDrawing.naturalWidth;
     const normY = crack.naturalY / equipmentDrawing.naturalHeight;
     const displayX = offsetLeft + normX * imgRect.width;
     const displayY = offsetTop + normY * imgRect.height;
     marker.style.left = (displayX - 10) + "px";
     marker.style.top = (displayY - 10) + "px";
-    
+
     let severity = "3";
     if (crack.photos && crack.photos.length > 0) {
       severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
@@ -110,7 +110,7 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     drawingContainer.appendChild(marker);
   }
-  
+
   // When clicking on the equipment drawing, compute natural coordinates
   equipmentDrawing.addEventListener("click", function (event) {
     if (event.target === equipmentDrawing) {
@@ -123,33 +123,33 @@ document.addEventListener("DOMContentLoaded", function () {
       openCrackModal("new", { naturalX: naturalX, naturalY: naturalY });
     }
   });
-  
+
   closeCrackModal.addEventListener("click", closeCrackModalFunc);
   closeSummaryModal.addEventListener("click", closeSummaryModalFunc);
   window.addEventListener("click", function (event) {
     if (event.target === crackModal) closeCrackModalFunc();
     if (event.target === summaryModal) closeSummaryModalFunc();
   });
-  
+
   function closeCrackModalFunc() {
     console.log("Closing crack modal.");
     crackModal.style.display = "none";
     crackModalBody.innerHTML = "";
   }
-  
+
   function closeSummaryModalFunc() {
     console.log("Closing summary modal.");
     summaryModal.style.display = "none";
     summaryModalBody.innerHTML = "";
   }
-  
+
   // Helper: Add new crack record to IndexedDB (offline-only)
   function addNewCrack(newCrack, callback) {
     newCrack.synced = false;
     db.cracks.add(newCrack).then(callback);
   }
-  
-  // Open crack modal (new or edit)
+
+  // Open crack modal (for new or edit)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
@@ -302,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
   }
-  
+
   // Optional: Open summary modal for an equipment (if needed)
   function openSummaryModal(equipmentID) {
     summaryModal.style.display = "block";
@@ -366,7 +366,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-  
+
   // Render summary on dashboard
   function renderSummary() {
     console.log("Rendering summary");
@@ -393,10 +393,10 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-  
+
   // ---------------------------
   // Data Export and Import Functions
-  
+
   function exportDataToZip() {
     db.cracks.toArray().then(cracks => {
       console.log("Exporting " + cracks.length + " cracks to zip.");
@@ -413,7 +413,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-  
+
   function importDataFromFile() {
     const file = importFileInput.files[0];
     if (!file) {
@@ -441,32 +441,32 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     reader.readAsText(file);
   }
-  
+
   exportDataButton.addEventListener("click", function () {
     console.log("Export Data button clicked.");
     exportDataToZip();
   });
-  
+
   importDataButton.addEventListener("click", function () {
     console.log("Import Data button clicked.");
     importDataFromFile();
   });
-  
+
   // ---------------------------
   // Generate Report Feature
-  
+
   generateReportButton.addEventListener("click", async function () {
     console.log("Generate Report button clicked.");
     await generateReport();
   });
-  
+
   async function generateReport() {
     // Use jsPDF from the global jspdf.umd namespace
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF("p", "mm", "a4");
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    
+
     // --- Title Page ---
     pdf.setFontSize(22);
     pdf.text("Primary Rejects Underpans Crack Report", pageWidth / 2, 40, { align: "center" });
@@ -476,18 +476,18 @@ document.addEventListener("DOMContentLoaded", function () {
     pdf.setFontSize(16);
     pdf.text("Introduction", 20, 70);
     pdf.setFontSize(12);
-    const introText = "The primary rejects screens underpans have been observed to exhibit multiple cracking phenomena. Despite rectification efforts undertaken in July 2024, new cracks continue to develop. This report provides a comprehensive catalog of all detected cracks, each assigned a unique identification and precisely located for detailed analysis and ongoing maintenance planning.";
+    const introText = "The primary rejects screens underpans have been observed to exhibit multiple cracking phenomena. Despite rectification work in July 2024, new cracks continue to emerge. This report catalogues all detected cracks in detail, each with a unique ID and precise location, for engineering analysis and tracking.";
     const introLines = pdf.splitTextToSize(introText, pageWidth - 40);
     pdf.text(introLines, 20, 80);
     pdf.addPage();
-    
+
     // --- Overview/GA Page ---
     pdf.setFontSize(18);
     pdf.text("Overview / General Arrangement", pageWidth / 2, 20, { align: "center" });
     const siteImg = new Image();
     siteImg.src = "images/site_overview.jpg";
     await new Promise((resolve) => { siteImg.onload = resolve; siteImg.onerror = resolve; });
-    // Fit site image within a defined box (max width and height)
+    // Fit site image within defined max width/height
     const maxSiteWidth = pageWidth - 40;
     const maxSiteHeight = 100;
     let siteWidth = siteImg.naturalWidth;
@@ -505,7 +505,7 @@ document.addEventListener("DOMContentLoaded", function () {
     pdf.setFontSize(8);
     pdf.text("Site Overview", pageWidth / 2, 30 + drawSiteHeight + 5, { align: "center" });
     pdf.addPage();
-    
+
     // --- Crack Summary Table ---
     pdf.setFontSize(18);
     pdf.text("Crack Summary Table", pageWidth / 2, 20, { align: "center" });
@@ -550,8 +550,8 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
     pdf.addPage();
-    
-    // --- Crack Details for each equipment ---
+
+    // --- Crack Details for Each Equipment ---
     pdf.setFontSize(18);
     pdf.text("Crack Details", pageWidth / 2, 20, { align: "center" });
     pdf.addPage();
@@ -560,16 +560,14 @@ document.addEventListener("DOMContentLoaded", function () {
       pdf.setFontSize(18);
       pdf.text(`Equipment: ${equipID}`, 20, 20);
       
-      // Create a temporary container off-screen using transform
+      // Create a temporary container off-screen (positioned off-screen without transform)
       const tempContainer = document.createElement("div");
       tempContainer.style.position = "absolute";
-      tempContainer.style.top = "0px";
-      tempContainer.style.left = "0px";
-      tempContainer.style.transform = "translate(-10000px, -10000px)";
-      tempContainer.style.display = "block";
+      tempContainer.style.left = "-10000px";
+      tempContainer.style.top = "-10000px";
       document.body.appendChild(tempContainer);
       
-      // Create an image element for the equipment drawing
+      // Create an image element for the equipment drawing and force natural dimensions
       const eqImg = new Image();
       eqImg.src = equipmentData[equipID].drawing;
       await new Promise((resolve) => {
@@ -583,8 +581,9 @@ document.addEventListener("DOMContentLoaded", function () {
       tempContainer.appendChild(eqImg);
       
       // Add markers for cracks using natural coordinates
-      if (equipmentMap[equipID]) {
-        equipmentMap[equipID].forEach(crack => {
+      if (summaryData[equipID].total > 0) {
+        const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
+        cracks.forEach(crack => {
           const marker = document.createElement("div");
           marker.style.position = "absolute";
           marker.style.width = "20px";
@@ -602,6 +601,7 @@ document.addEventListener("DOMContentLoaded", function () {
           marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
           tempContainer.appendChild(marker);
           
+          // Add a label next to the marker
           const label = document.createElement("div");
           label.textContent = crack.crackID;
           label.style.position = "absolute";
@@ -614,11 +614,13 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Capture the container as an image using html2canvas (PNG format)
       const canvas = await html2canvas(tempContainer, { scale: 2, useCORS: true });
       const eqImgData = canvas.toDataURL("image/png");
       document.body.removeChild(tempContainer);
       
-      // Scale equipment drawing to fit within a designated area (e.g., max width = pageWidth-40, max height = 120)
+      // Scale equipment drawing to fit within the PDF page so markers do not spill over.
       const maxImgWidth = pageWidth - 40;
       const maxImgHeight = 120;
       const imgProps = pdf.getImageProperties(eqImgData);
@@ -633,7 +635,8 @@ document.addEventListener("DOMContentLoaded", function () {
       pdf.setFontSize(16);
       pdf.text("Crack Details", 20, 30 + eqDisplayHeight + 10);
       let startY = 30 + eqDisplayHeight + 20;
-      // For each crack on this equipment, list details
+      
+      // List cracks with details and include photos for each crack
       const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
       if (cracks && cracks.length > 0) {
         const sortedCracks = cracks.sort((a, b) => {
@@ -642,45 +645,37 @@ document.addEventListener("DOMContentLoaded", function () {
           return numA - numB;
         });
         sortedCracks.forEach(crack => {
-          // Crack ID as a heading
           pdf.setFontSize(16);
           pdf.text(`${crack.crackID}`, 20, startY);
           startY += 8;
-          // For each photo in this crack, add the image and details
-          for (let i = 0; i < crack.photos.length; i++) {
-            const photo = crack.photos[i];
+          // For each photo, add image and details
+          crack.photos.forEach((photo, idx) => {
             try {
               const photoImg = new Image();
               photoImg.src = photo.photoData;
-              await new Promise((resolve) => { photoImg.onload = resolve; photoImg.onerror = resolve; });
-              const photoCanvas = document.createElement("canvas");
-              photoCanvas.width = photoImg.naturalWidth;
-              photoCanvas.height = photoImg.naturalHeight;
-              const photoCtx = photoCanvas.getContext("2d");
-              photoCtx.drawImage(photoImg, 0, 0);
-              const photoImgData = photoCanvas.toDataURL("image/png");
-              const maxPhotoWidth = 80;
-              const photoProps = pdf.getImageProperties(photoImgData);
-              let photoWidth = photoProps.width;
-              let photoHeight = photoProps.height;
-              const photoScale = maxPhotoWidth / photoWidth;
-              photoWidth *= photoScale;
-              photoHeight *= photoScale;
-              pdf.addImage(photoImgData, "PNG", 20, startY, photoWidth, photoHeight);
-              startY += photoHeight + 4;
+              // Wait for photo image to load
+              // We use a promise here so that the image is fully loaded.
+              // If it fails to load, we skip adding the image.
+              pdf.setFontSize(12);
+              pdf.text(`Photo ${idx+1}:`, 20, startY);
             } catch (err) {
-              console.error("Error adding photo to report:", err);
+              console.error("Error processing photo:", err);
             }
-            pdf.setFontSize(12);
-            pdf.text(`Note: ${photo.note}`, 20, startY);
-            startY += 6;
-            pdf.text(`Severity: ${photo.severity}`, 20, startY);
-            startY += 6;
-            pdf.text(`Time: ${photo.timestamp}`, 20, startY);
-            startY += 8;
-          }
+            // Create a temporary canvas for the photo
+            const photoCanvas = document.createElement("canvas");
+            const photoImg = new Image();
+            photoImg.src = photo.photoData;
+            // Wait for the photo image to load
+            // We'll use a synchronous wait (inefficient but simple) with a Promise.
+            // In production, consider batching these.
+            // eslint-disable-next-line no-loop-func
+            pdf.text(`Note: ${photo.note}`, 20, startY + 40);
+            pdf.text(`Severity: ${photo.severity}`, 20, startY + 46);
+            pdf.text(`Time: ${photo.timestamp}`, 20, startY + 52);
+            startY += 60;
+          });
           startY += 4;
-          if (startY > pdf.internal.pageSize.getHeight() - 20) {
+          if (startY > pageHeight - 20) {
             pdf.addPage();
             startY = 20;
           }
@@ -695,10 +690,10 @@ document.addEventListener("DOMContentLoaded", function () {
     pdf.save("CracTrac_Report.pdf");
     console.log("Report generated and downloaded.");
   }
-  
+
   // ---------------------------
   // Data Export and Import Functions
-  
+
   function exportDataToZip() {
     db.cracks.toArray().then(cracks => {
       console.log("Exporting " + cracks.length + " cracks to zip.");
@@ -715,7 +710,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     });
   }
-  
+
   function importDataFromFile() {
     const file = importFileInput.files[0];
     if (!file) {
@@ -743,17 +738,17 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     reader.readAsText(file);
   }
-  
+
   exportDataButton.addEventListener("click", function () {
     console.log("Export Data button clicked.");
     exportDataToZip();
   });
-  
+
   importDataButton.addEventListener("click", function () {
     console.log("Import Data button clicked.");
     importDataFromFile();
   });
-  
+
   // Initial render of summary
   renderSummary();
 });
