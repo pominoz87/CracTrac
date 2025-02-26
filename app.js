@@ -582,10 +582,11 @@ document.addEventListener("DOMContentLoaded", function () {
       tempContainer.style.height = eqImg.naturalHeight + "px";
       tempContainer.appendChild(eqImg);
       
-      // Add markers for cracks using natural coordinates
+      // Add markers for cracks using natural coordinates (do not add text labels here)
+      let cracksForEquip = [];
       if (summaryData[equipID].total > 0) {
-        const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
-        cracks.forEach(crack => {
+        cracksForEquip = await db.cracks.where("equipmentID").equals(equipID).toArray();
+        cracksForEquip.forEach(crack => {
           const marker = document.createElement("div");
           marker.style.position = "absolute";
           marker.style.width = "20px";
@@ -602,16 +603,6 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
           tempContainer.appendChild(marker);
-          
-          // Add a label next to the marker
-          const label = document.createElement("div");
-          label.textContent = crack.crackID;
-          label.style.position = "absolute";
-          label.style.left = (posX + 22) + "px";
-          label.style.top = posY + "px";
-          label.style.fontSize = "12px";
-          label.style.color = "black";
-          tempContainer.appendChild(label);
         });
       }
       
@@ -631,12 +622,45 @@ document.addEventListener("DOMContentLoaded", function () {
       const scaleFactor = Math.min(maxImgWidth / eqDisplayWidth, maxImgHeight / eqDisplayHeight);
       eqDisplayWidth *= scaleFactor;
       eqDisplayHeight *= scaleFactor;
+      // Position the drawing at (20,30)
       pdf.addImage(eqImgData, "PNG", 20, 30, eqDisplayWidth, eqDisplayHeight);
       
-      // Add heading "Crack Details"
+      // Now add arrows and labels for each crack marker.
+      // Calculate marker positions on the PDF image:
+      let markers = [];
+      for (const crack of cracksForEquip) {
+        const normX = crack.naturalX / eqImg.naturalWidth;
+        const normY = crack.naturalY / eqImg.naturalHeight;
+        const markerX = 20 + eqDisplayWidth * normX;
+        const markerY = 30 + eqDisplayHeight * normY;
+        markers.push({ crack, markerX, markerY });
+      }
+      // Sort markers by their PDF Y position (to avoid overlapping labels)
+      markers.sort((a, b) => a.markerY - b.markerY);
+      let lastLabelY = 0;
+      markers.forEach(m => {
+        const labelX = pageWidth - 30;
+        let labelY = m.markerY;
+        if (labelY - lastLabelY < 6) {
+          labelY = lastLabelY + 6;
+        }
+        lastLabelY = labelY;
+        // Draw an arrow (line) from the marker to the label
+        pdf.setLineWidth(0.5);
+        pdf.line(m.markerX, m.markerY, labelX, labelY);
+        // Optionally, draw a small arrowhead (simple triangle)
+        // Here we simply draw a short line segment at the label end:
+        pdf.line(labelX, labelY, labelX - 2, labelY - 2);
+        pdf.line(labelX, labelY, labelX - 2, labelY + 2);
+        // Write the crack ID at the label position
+        pdf.setFontSize(12);
+        pdf.text(m.crack.crackID, labelX + 2, labelY + 2);
+      });
+
+      // Add heading "Crack Details" below the equipment drawing
       pdf.setFontSize(16);
-      pdf.text("Crack Details", 20, 30 + eqDisplayHeight + 10);
-      let startYDetails = 30 + eqDisplayHeight + 20;
+      pdf.text("Crack Details", 20, 30 + eqDisplayHeight + 20);
+      let startYDetails = 30 + eqDisplayHeight + 30;
       
       // For each crack on this equipment, list details and add photos
       const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
@@ -658,7 +682,7 @@ document.addEventListener("DOMContentLoaded", function () {
               photoImg.crossOrigin = "Anonymous";
               photoImg.src = photo.photoData;
               await new Promise((resolve) => { photoImg.onload = resolve; photoImg.onerror = resolve; });
-              // Create a canvas and scale the photo down if necessary
+              // Scale down the photo if its natural width is too high
               const maxPhotoCanvasWidth = 800;
               let scale = 1;
               if (photoImg.naturalWidth > maxPhotoCanvasWidth) {
