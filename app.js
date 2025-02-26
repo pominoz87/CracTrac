@@ -37,7 +37,6 @@ document.addEventListener("DOMContentLoaded", function () {
   // ---------------------------
   // Original Offline Functionality
 
-  // Equipment selection
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -83,13 +82,13 @@ document.addEventListener("DOMContentLoaded", function () {
     marker.style.height = "20px";
     marker.style.borderRadius = "50%";
 
-    // Get displayed position and dimensions of the equipment image
+    // Get displayed dimensions and position of the equipment image
     const imgRect = equipmentDrawing.getBoundingClientRect();
     const containerRect = drawingContainer.getBoundingClientRect();
     const offsetLeft = imgRect.left - containerRect.left;
     const offsetTop = imgRect.top - containerRect.top;
 
-    // Calculate marker position using natural coordinates (naturalX, naturalY)
+    // Calculate marker position using natural coordinates
     const normX = crack.naturalX / equipmentDrawing.naturalWidth;
     const normY = crack.naturalY / equipmentDrawing.naturalHeight;
     const displayX = offsetLeft + normX * imgRect.width;
@@ -149,7 +148,7 @@ document.addEventListener("DOMContentLoaded", function () {
     db.cracks.add(newCrack).then(callback);
   }
 
-  // Open crack modal (for new or edit)
+  // Open crack modal (new or edit)
   function openCrackModal(mode, crackData) {
     console.log("Opening crack modal in mode:", mode, "for", crackData.crackID || "new crack");
     crackModal.style.display = "block";
@@ -476,7 +475,7 @@ document.addEventListener("DOMContentLoaded", function () {
     pdf.setFontSize(16);
     pdf.text("Introduction", 20, 70);
     pdf.setFontSize(12);
-    const introText = "The primary rejects screens underpans have been observed to exhibit multiple cracking phenomena. Despite rectification work in July 2024, new cracks continue to emerge. This report catalogues all detected cracks in detail, each with a unique ID and precise location, for engineering analysis and tracking.";
+    const introText = "The primary rejects screens underpans have been observed to exhibit multiple cracking phenomena. Despite rectification work in July 2024, new cracks continue to emerge. This report catalogues all detected cracks in detail, each with a unique ID and precise location, for engineering analysis and ongoing maintenance planning.";
     const introLines = pdf.splitTextToSize(introText, pageWidth - 40);
     pdf.text(introLines, 20, 80);
     pdf.addPage();
@@ -487,7 +486,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const siteImg = new Image();
     siteImg.src = "images/site_overview.jpg";
     await new Promise((resolve) => { siteImg.onload = resolve; siteImg.onerror = resolve; });
-    // Fit site image within defined max width/height
     const maxSiteWidth = pageWidth - 40;
     const maxSiteHeight = 100;
     let siteWidth = siteImg.naturalWidth;
@@ -560,7 +558,7 @@ document.addEventListener("DOMContentLoaded", function () {
       pdf.setFontSize(18);
       pdf.text(`Equipment: ${equipID}`, 20, 20);
       
-      // Create a temporary container off-screen (positioned off-screen without transform)
+      // Create a temporary container off-screen using negative positioning
       const tempContainer = document.createElement("div");
       tempContainer.style.position = "absolute";
       tempContainer.style.left = "-10000px";
@@ -620,7 +618,7 @@ document.addEventListener("DOMContentLoaded", function () {
       const eqImgData = canvas.toDataURL("image/png");
       document.body.removeChild(tempContainer);
       
-      // Scale equipment drawing to fit within the PDF page so markers do not spill over.
+      // Scale equipment drawing to fit within the PDF page (max width = pageWidth-40, max height = 120)
       const maxImgWidth = pageWidth - 40;
       const maxImgHeight = 120;
       const imgProps = pdf.getImageProperties(eqImgData);
@@ -634,9 +632,9 @@ document.addEventListener("DOMContentLoaded", function () {
       // Add heading "Crack Details"
       pdf.setFontSize(16);
       pdf.text("Crack Details", 20, 30 + eqDisplayHeight + 10);
-      let startY = 30 + eqDisplayHeight + 20;
+      let startYDetails = 30 + eqDisplayHeight + 20;
       
-      // List cracks with details and include photos for each crack
+      // For each crack on this equipment, list details
       const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
       if (cracks && cracks.length > 0) {
         const sortedCracks = cracks.sort((a, b) => {
@@ -644,45 +642,55 @@ document.addEventListener("DOMContentLoaded", function () {
           const numB = parseInt(b.crackID.split("Crack")[1]);
           return numA - numB;
         });
-        sortedCracks.forEach(crack => {
+        for (const crack of sortedCracks) {
           pdf.setFontSize(16);
-          pdf.text(`${crack.crackID}`, 20, startY);
-          startY += 8;
-          // For each photo, add image and details
-          crack.photos.forEach((photo, idx) => {
+          pdf.text(`${crack.crackID}`, 20, startYDetails);
+          startYDetails += 8;
+          // For each photo in this crack, add the image and its details
+          for (let idx = 0; idx < crack.photos.length; idx++) {
+            const photo = crack.photos[idx];
             try {
+              // Load the photo image and convert it to PNG format
               const photoImg = new Image();
+              photoImg.crossOrigin = "Anonymous";
               photoImg.src = photo.photoData;
-              // Wait for photo image to load
-              // We use a promise here so that the image is fully loaded.
-              // If it fails to load, we skip adding the image.
-              pdf.setFontSize(12);
-              pdf.text(`Photo ${idx+1}:`, 20, startY);
+              await new Promise((resolve) => { photoImg.onload = resolve; photoImg.onerror = resolve; });
+              const photoCanvas = document.createElement("canvas");
+              photoCanvas.width = photoImg.naturalWidth;
+              photoCanvas.height = photoImg.naturalHeight;
+              const photoCtx = photoCanvas.getContext("2d");
+              photoCtx.drawImage(photoImg, 0, 0);
+              const photoImgData = photoCanvas.toDataURL("image/png");
+              // Scale the photo to a max width (e.g., 80mm)
+              const maxPhotoWidth = 80;
+              const photoProps = pdf.getImageProperties(photoImgData);
+              let photoWidth = photoProps.width;
+              let photoHeight = photoProps.height;
+              const photoScale = maxPhotoWidth / photoWidth;
+              photoWidth *= photoScale;
+              photoHeight *= photoScale;
+              pdf.addImage(photoImgData, "PNG", 20, startYDetails, photoWidth, photoHeight);
+              startYDetails += photoHeight + 4;
             } catch (err) {
-              console.error("Error processing photo:", err);
+              console.error("Error adding photo to report:", err);
             }
-            // Create a temporary canvas for the photo
-            const photoCanvas = document.createElement("canvas");
-            const photoImg = new Image();
-            photoImg.src = photo.photoData;
-            // Wait for the photo image to load
-            // We'll use a synchronous wait (inefficient but simple) with a Promise.
-            // In production, consider batching these.
-            // eslint-disable-next-line no-loop-func
-            pdf.text(`Note: ${photo.note}`, 20, startY + 40);
-            pdf.text(`Severity: ${photo.severity}`, 20, startY + 46);
-            pdf.text(`Time: ${photo.timestamp}`, 20, startY + 52);
-            startY += 60;
-          });
-          startY += 4;
-          if (startY > pageHeight - 20) {
-            pdf.addPage();
-            startY = 20;
+            pdf.setFontSize(12);
+            pdf.text(`Note: ${photo.note}`, 20, startYDetails);
+            startYDetails += 6;
+            pdf.text(`Severity: ${photo.severity}`, 20, startYDetails);
+            startYDetails += 6;
+            pdf.text(`Time: ${photo.timestamp}`, 20, startYDetails);
+            startYDetails += 8;
           }
-        });
+          startYDetails += 4;
+          if (startYDetails > pageHeight - 20) {
+            pdf.addPage();
+            startYDetails = 20;
+          }
+        }
       } else {
         pdf.setFontSize(12);
-        pdf.text("No cracks recorded.", 20, startY);
+        pdf.text("No cracks recorded.", 20, startYDetails);
       }
       pdf.addPage();
     }
