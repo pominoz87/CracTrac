@@ -470,6 +470,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
 
+    // Helper function to check vertical space
+    function ensureSpace(minSpace) {
+      if (startYDetails + minSpace > pageHeight - 20) {
+        pdf.addPage();
+        startYDetails = 20;
+      }
+    }
+
     // --- Title Page ---
     pdf.setFontSize(22);
     pdf.text("Primary Rejects Underpans Crack Report", pageWidth / 2, 40, { align: "center" });
@@ -625,343 +633,6 @@ document.addEventListener("DOMContentLoaded", function () {
       pdf.addImage(eqImgData, "PNG", 20, 30, eqDisplayWidth, eqDisplayHeight);
       
       // --- Add arrows and labels for crack markers ---
-      // Calculate marker positions on the PDF image using the scaled drawing dimensions.
-      let markers = [];
-      for (const crack of cracksForEquip) {
-        const normX = crack.naturalX / eqImg.naturalWidth;
-        const normY = crack.naturalY / eqImg.naturalHeight;
-        const markerX = 20 + eqDisplayWidth * normX;
-        const markerY = 30 + eqDisplayHeight * normY;
-        markers.push({ crack, markerX, markerY });
-      }
-      // Sort markers by their PDF Y position
-      markers.sort((a, b) => a.markerY - b.markerY);
-      let lastLabelY = 0;
-      markers.forEach(m => {
-        // Adjust label X position to be within the page margins (move left to pageWidth - 50)
-        const labelX = pageWidth - 50;
-        let labelY = m.markerY;
-        if (labelY - lastLabelY < 6) {
-          labelY = lastLabelY + 6;
-        }
-        lastLabelY = labelY;
-        // Draw an arrow (line) from the marker to the label
-        pdf.setLineWidth(0.5);
-        pdf.line(m.markerX, m.markerY, labelX, labelY);
-        // Draw a simple arrowhead at the label end
-        pdf.line(labelX, labelY, labelX - 2, labelY - 2);
-        pdf.line(labelX, labelY, labelX - 2, labelY + 2);
-        // Write the crack ID at the label position
-        pdf.setFontSize(12);
-        pdf.text(m.crack.crackID, labelX + 2, labelY + 2);
-      });
-
-      // Add heading "Crack Details" below the equipment drawing
-      pdf.setFontSize(16);
-      pdf.text("Crack Details", 20, 30 + eqDisplayHeight + 20);
-      let startYDetails = 30 + eqDisplayHeight + 30;
-      
-      // For each crack on this equipment, list details and add photos
-      const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
-      if (cracks && cracks.length > 0) {
-        const sortedCracks = cracks.sort((a, b) => {
-          const numA = parseInt(a.crackID.split("Crack")[1]);
-          const numB = parseInt(b.crackID.split("Crack")[1]);
-          return numA - numB;
-        });
-        for (const crack of sortedCracks) {
-          pdf.setFontSize(16);
-          pdf.text(`${crack.crackID}`, 20, startYDetails);
-          startYDetails += 8;
-          // For each photo in this crack, add the image and its details
-          for (let idx = 0; idx < crack.photos.length; idx++) {
-            const photo = crack.photos[idx];
-            try {
-              const photoImg = new Image();
-              photoImg.crossOrigin = "Anonymous";
-              photoImg.src = photo.photoData;
-              await new Promise((resolve) => { photoImg.onload = resolve; photoImg.onerror = resolve; });
-              // Scale the photo if its natural width is too high (limit canvas width to 800)
-              const maxPhotoCanvasWidth = 800;
-              let scale = 1;
-              if (photoImg.naturalWidth > maxPhotoCanvasWidth) {
-                scale = maxPhotoCanvasWidth / photoImg.naturalWidth;
-              }
-              const photoCanvas = document.createElement("canvas");
-              photoCanvas.width = photoImg.naturalWidth * scale;
-              photoCanvas.height = photoImg.naturalHeight * scale;
-              const photoCtx = photoCanvas.getContext("2d");
-              photoCtx.drawImage(photoImg, 0, 0, photoCanvas.width, photoCanvas.height);
-              const photoImgData = photoCanvas.toDataURL("image/png");
-              // Scale the photo to a max width in the PDF (80mm)
-              const maxPhotoWidth = 80;
-              const photoProps = pdf.getImageProperties(photoImgData);
-              let photoWidth = photoProps.width;
-              let photoHeight = photoProps.height;
-              const photoScale = maxPhotoWidth / photoWidth;
-              photoWidth *= photoScale;
-              photoHeight *= photoScale;
-              pdf.addImage(photoImgData, "PNG", 20, startYDetails, photoWidth, photoHeight);
-              startYDetails += photoHeight + 4;
-            } catch (err) {
-              console.error("Error adding photo to report:", err);
-            }
-            pdf.setFontSize(12);
-            pdf.text(`Note: ${photo.note}`, 20, startYDetails);
-            startYDetails += 6;
-            pdf.text(`Severity: ${photo.severity}`, 20, startYDetails);
-            startYDetails += 6;
-            pdf.text(`Time: ${photo.timestamp}`, 20, startYDetails);
-            startYDetails += 8;
-          }
-          startYDetails += 4;
-          if (startYDetails > pageHeight - 20) {
-            pdf.addPage();
-            startYDetails = 20;
-          }
-        }
-      } else {
-        pdf.setFontSize(12);
-        pdf.text("No cracks recorded.", 20, startYDetails);
-      }
-      pdf.addPage();
-    }
-
-    pdf.save("CracTrac_Report.pdf");
-    console.log("Report generated and downloaded.");
-  }
-
-  // ---------------------------
-  // Data Export and Import Functions
-
-  function exportDataToZip() {
-    db.cracks.toArray().then(cracks => {
-      console.log("Exporting " + cracks.length + " cracks to zip.");
-      const zip = new JSZip();
-      zip.file("cracks.json", JSON.stringify(cracks, null, 2));
-      zip.generateAsync({ type: "blob" }).then(content => {
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(content);
-        link.download = "CracTrac_Data.zip";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        console.log("Export complete.");
-      });
-    });
-  }
-
-  function importDataFromFile() {
-    const file = importFileInput.files[0];
-    if (!file) {
-      alert("Please select a JSON file to import.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        const importedData = JSON.parse(e.target.result);
-        db.cracks.clear().then(() => {
-          return db.cracks.bulkAdd(importedData);
-        }).then(() => {
-          console.log("Import complete.");
-          renderSummary();
-          if (currentEquipmentID) {
-            loadCrackMarkers();
-          }
-        }).catch(err => {
-          console.error("Error during import:", err);
-        });
-      } catch (err) {
-        alert("Error parsing JSON: " + err);
-      }
-    };
-    reader.readAsText(file);
-  }
-
-  exportDataButton.addEventListener("click", function () {
-    console.log("Export Data button clicked.");
-    exportDataToZip();
-  });
-
-  importDataButton.addEventListener("click", function () {
-    console.log("Import Data button clicked.");
-    importDataFromFile();
-  });
-
-  // Initial render of summary
-  renderSummary();
-
-  // ---------------------------
-  // Generate Report Feature
-
-  generateReportButton.addEventListener("click", async function () {
-    console.log("Generate Report button clicked.");
-    await generateReport();
-  });
-
-  async function generateReport() {
-    // Use jsPDF from the global jspdf.umd namespace
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-
-    // --- Title Page ---
-    pdf.setFontSize(22);
-    pdf.text("Primary Rejects Underpans Crack Report", pageWidth / 2, 40, { align: "center" });
-    pdf.setFontSize(12);
-    const currentDate = new Date().toLocaleString();
-    pdf.text(`Date: ${currentDate}`, pageWidth / 2, 50, { align: "center" });
-    pdf.setFontSize(16);
-    pdf.text("Introduction", 20, 70);
-    pdf.setFontSize(12);
-    const introText = "The primary rejects screens underpans have been observed to exhibit multiple cracking phenomena. Despite rectification work in July 2024, new cracks continue to emerge. This report catalogues all detected cracks in detail, each with a unique ID and precise location, for engineering analysis and ongoing maintenance planning.";
-    const introLines = pdf.splitTextToSize(introText, pageWidth - 40);
-    pdf.text(introLines, 20, 80);
-    pdf.addPage();
-
-    // --- Overview/GA Page ---
-    pdf.setFontSize(18);
-    pdf.text("Overview / General Arrangement", pageWidth / 2, 20, { align: "center" });
-    const siteImg = new Image();
-    siteImg.src = "images/site_overview.jpg";
-    await new Promise((resolve) => { siteImg.onload = resolve; siteImg.onerror = resolve; });
-    const maxSiteWidth = pageWidth - 40;
-    const maxSiteHeight = 100;
-    let siteWidth = siteImg.naturalWidth;
-    let siteHeight = siteImg.naturalHeight;
-    const siteScale = Math.min(maxSiteWidth / siteWidth, maxSiteHeight / siteHeight);
-    const drawSiteWidth = siteWidth * siteScale;
-    const drawSiteHeight = siteHeight * siteScale;
-    const canvasSite = document.createElement("canvas");
-    canvasSite.width = siteWidth;
-    canvasSite.height = siteHeight;
-    const ctxSite = canvasSite.getContext("2d");
-    ctxSite.drawImage(siteImg, 0, 0);
-    const siteImgData = canvasSite.toDataURL("image/jpeg", 1.0);
-    pdf.addImage(siteImgData, "JPEG", (pageWidth - drawSiteWidth) / 2, 30, drawSiteWidth, drawSiteHeight);
-    pdf.setFontSize(8);
-    pdf.text("Site Overview", pageWidth / 2, 30 + drawSiteHeight + 5, { align: "center" });
-    pdf.addPage();
-
-    // --- Crack Summary Table ---
-    pdf.setFontSize(18);
-    pdf.text("Crack Summary Table", pageWidth / 2, 20, { align: "center" });
-    const headers = ["Equipment ID", "Severe", "Moderate", "Low", "Total"];
-    const colWidths = [40, 30, 30, 30, 30];
-    let startX = 20;
-    let startY = 30;
-    pdf.setFillColor(200, 200, 200);
-    pdf.rect(startX, startY, colWidths.reduce((a, b) => a + b, 0), 10, "F");
-    pdf.setFontSize(12);
-    let currentX = startX;
-    headers.forEach((header, index) => {
-      pdf.text(header, currentX + colWidths[index] / 2, startY + 7, { align: "center" });
-      currentX += colWidths[index];
-    });
-    startY += 12;
-    const summaryData = {};
-    for (const equipID of Object.keys(equipmentData)) {
-      const cracks = await db.cracks.where("equipmentID").equals(equipID).toArray();
-      const severe = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "1")).length;
-      const moderate = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "2")).length;
-      const low = cracks.filter(c => c.photos && c.photos.some(p => p.severity === "3")).length;
-      const total = cracks.length;
-      summaryData[equipID] = { severe, moderate, low, total };
-    }
-    for (const equipID in summaryData) {
-      currentX = startX;
-      const row = summaryData[equipID];
-      pdf.text(equipID, currentX + colWidths[0] / 2, startY + 7, { align: "center" });
-      currentX += colWidths[0];
-      pdf.text(String(row.severe), currentX + colWidths[1] / 2, startY + 7, { align: "center" });
-      currentX += colWidths[1];
-      pdf.text(String(row.moderate), currentX + colWidths[2] / 2, startY + 7, { align: "center" });
-      currentX += colWidths[2];
-      pdf.text(String(row.low), currentX + colWidths[3] / 2, startY + 7, { align: "center" });
-      currentX += colWidths[3];
-      pdf.text(String(row.total), currentX + colWidths[4] / 2, startY + 7, { align: "center" });
-      startY += 10;
-      if (startY > pageHeight - 20) {
-        pdf.addPage();
-        startY = 20;
-      }
-    }
-    pdf.addPage();
-
-    // --- Crack Details for Each Equipment ---
-    pdf.setFontSize(18);
-    pdf.text("Crack Details", pageWidth / 2, 20, { align: "center" });
-    pdf.addPage();
-    const equipmentIDs = Object.keys(equipmentData);
-    for (const equipID of equipmentIDs) {
-      pdf.setFontSize(18);
-      pdf.text(`Equipment: ${equipID}`, 20, 20);
-      
-      // Create a temporary container off-screen using negative positioning
-      const tempContainer = document.createElement("div");
-      tempContainer.style.position = "absolute";
-      tempContainer.style.left = "-10000px";
-      tempContainer.style.top = "-10000px";
-      document.body.appendChild(tempContainer);
-      
-      // Create an image element for the equipment drawing and force natural dimensions
-      const eqImg = new Image();
-      eqImg.src = equipmentData[equipID].drawing;
-      await new Promise((resolve) => {
-        eqImg.onload = resolve;
-        eqImg.onerror = resolve;
-      });
-      eqImg.width = eqImg.naturalWidth;
-      eqImg.height = eqImg.naturalHeight;
-      tempContainer.style.width = eqImg.naturalWidth + "px";
-      tempContainer.style.height = eqImg.naturalHeight + "px";
-      tempContainer.appendChild(eqImg);
-      
-      // Add markers for cracks using natural coordinates (do not add text labels here)
-      let cracksForEquip = [];
-      if (summaryData[equipID].total > 0) {
-        cracksForEquip = await db.cracks.where("equipmentID").equals(equipID).toArray();
-        cracksForEquip.forEach(crack => {
-          const marker = document.createElement("div");
-          marker.style.position = "absolute";
-          marker.style.width = "20px";
-          marker.style.height = "20px";
-          marker.style.borderRadius = "50%";
-          marker.style.border = "2px solid white";
-          const posX = crack.naturalX - 10;
-          const posY = crack.naturalY - 10;
-          marker.style.left = posX + "px";
-          marker.style.top = posY + "px";
-          let severity = "3";
-          if (crack.photos && crack.photos.length > 0) {
-            severity = crack.photos.reduce((min, photo) => Math.min(min, parseInt(photo.severity)), 3).toString();
-          }
-          marker.style.backgroundColor = severity === "1" ? "red" : severity === "2" ? "blue" : "pink";
-          tempContainer.appendChild(marker);
-        });
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Capture the container as an image using html2canvas (PNG format) with scale 1
-      const canvas = await html2canvas(tempContainer, { scale: 1, useCORS: true });
-      const eqImgData = canvas.toDataURL("image/png");
-      document.body.removeChild(tempContainer);
-      
-      // Scale equipment drawing to fit within the PDF page so markers do not spill over.
-      const maxImgWidth = pageWidth - 40;
-      const maxImgHeight = 120;
-      const imgProps = pdf.getImageProperties(eqImgData);
-      let eqDisplayWidth = imgProps.width;
-      let eqDisplayHeight = imgProps.height;
-      const scaleFactor = Math.min(maxImgWidth / eqDisplayWidth, maxImgHeight / eqDisplayHeight);
-      eqDisplayWidth *= scaleFactor;
-      eqDisplayHeight *= scaleFactor;
-      pdf.addImage(eqImgData, "PNG", 20, 30, eqDisplayWidth, eqDisplayHeight);
-      
-      // --- Add arrows and labels for crack markers ---
       let markers = [];
       for (const crack of cracksForEquip) {
         const normX = crack.naturalX / eqImg.naturalWidth;
@@ -973,7 +644,7 @@ document.addEventListener("DOMContentLoaded", function () {
       markers.sort((a, b) => a.markerY - b.markerY);
       let lastLabelY = 0;
       markers.forEach(m => {
-        // Adjust label X position to be within the page (now using pageWidth - 50)
+        // Adjust label X position to be within the page (using pageWidth - 50)
         const labelX = pageWidth - 50;
         let labelY = m.markerY;
         if (labelY - lastLabelY < 6) {
@@ -1003,6 +674,11 @@ document.addEventListener("DOMContentLoaded", function () {
           return numA - numB;
         });
         for (const crack of sortedCracks) {
+          // Ensure enough space for crack header
+          if (startYDetails + 10 > pageHeight - 20) {
+            pdf.addPage();
+            startYDetails = 20;
+          }
           pdf.setFontSize(16);
           pdf.text(`${crack.crackID}`, 20, startYDetails);
           startYDetails += 8;
@@ -1013,7 +689,6 @@ document.addEventListener("DOMContentLoaded", function () {
               photoImg.crossOrigin = "Anonymous";
               photoImg.src = photo.photoData;
               await new Promise((resolve) => { photoImg.onload = resolve; photoImg.onerror = resolve; });
-              // Limit photo canvas width to 800 if needed
               const maxPhotoCanvasWidth = 800;
               let scale = 1;
               if (photoImg.naturalWidth > maxPhotoCanvasWidth) {
@@ -1032,16 +707,34 @@ document.addEventListener("DOMContentLoaded", function () {
               const photoScale = maxPhotoWidth / photoWidth;
               photoWidth *= photoScale;
               photoHeight *= photoScale;
+              // Ensure space before adding photo
+              if (startYDetails + photoHeight + 10 > pageHeight - 20) {
+                pdf.addPage();
+                startYDetails = 20;
+              }
               pdf.addImage(photoImgData, "PNG", 20, startYDetails, photoWidth, photoHeight);
               startYDetails += photoHeight + 4;
             } catch (err) {
               console.error("Error adding photo to report:", err);
             }
+            // Ensure space before adding text lines
+            if (startYDetails + 10 > pageHeight - 20) {
+              pdf.addPage();
+              startYDetails = 20;
+            }
             pdf.setFontSize(12);
             pdf.text(`Note: ${photo.note}`, 20, startYDetails);
             startYDetails += 6;
+            if (startYDetails + 10 > pageHeight - 20) {
+              pdf.addPage();
+              startYDetails = 20;
+            }
             pdf.text(`Severity: ${photo.severity}`, 20, startYDetails);
             startYDetails += 6;
+            if (startYDetails + 10 > pageHeight - 20) {
+              pdf.addPage();
+              startYDetails = 20;
+            }
             pdf.text(`Time: ${photo.timestamp}`, 20, startYDetails);
             startYDetails += 8;
           }
