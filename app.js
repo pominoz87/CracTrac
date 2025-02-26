@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // ---------------------------
   // Original Offline Functionality
 
+  // Equipment selection
   document.querySelectorAll(".equipment-button").forEach((button) => {
     button.addEventListener("click", function () {
       const equipmentID = this.getAttribute("data-equipment-id");
@@ -451,6 +452,9 @@ document.addEventListener("DOMContentLoaded", function () {
     importDataFromFile();
   });
 
+  // Initial render of summary
+  renderSummary();
+
   // ---------------------------
   // Generate Report Feature
 
@@ -613,8 +617,8 @@ document.addEventListener("DOMContentLoaded", function () {
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Capture the container as an image using html2canvas (PNG format)
-      const canvas = await html2canvas(tempContainer, { scale: 2, useCORS: true });
+      // Capture the container as an image using html2canvas (PNG format) with a lower scale to fit A4
+      const canvas = await html2canvas(tempContainer, { scale: 1, useCORS: true });
       const eqImgData = canvas.toDataURL("image/png");
       document.body.removeChild(tempContainer);
       
@@ -650,7 +654,6 @@ document.addEventListener("DOMContentLoaded", function () {
           for (let idx = 0; idx < crack.photos.length; idx++) {
             const photo = crack.photos[idx];
             try {
-              // Load the photo image and convert it to PNG format
               const photoImg = new Image();
               photoImg.crossOrigin = "Anonymous";
               photoImg.src = photo.photoData;
@@ -694,7 +697,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       pdf.addPage();
     }
-    
+
     pdf.save("CracTrac_Report.pdf");
     console.log("Report generated and downloaded.");
   }
